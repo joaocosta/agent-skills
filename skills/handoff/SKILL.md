@@ -45,6 +45,21 @@ Create ordered Ralph-loop tasks only when session boundaries, dependencies, risk
 
 Prefer the execution shape explicitly requested by the user when it remains feasible. Do not split work merely because the design record is long.
 
+### Size Ralph-loop tasks for fresh contexts
+
+Size each task so a fresh agent can read its references, implement it, add or update focused tests, run validation, and complete the handoff comfortably within one context window. As a conservative planning target, the expected work should consume no more than roughly 20–40% of a fresh context window; uncertainty and debugging need the remaining capacity.
+
+Prefer vertical, independently valuable and verifiable increments. Keep tightly coupled code and its direct tests together, but split work when it crosses subsystems or concerns, combines unrelated production changes, migrations, refactors, documentation, or broad test work, or contains outcomes that can be implemented, tested, and committed independently. Do not combine work merely because it belongs to one feature. When substantial discovery or an unresolved implementation decision remains, create an ordered investigation or decision task before dependent implementation. Preserve real dependencies, and do not create trivial mechanical tasks or unverifiable intermediate states.
+
+Before finalizing a Ralph-loop decomposition, review every proposed task and ask:
+
+- Could this reasonably consume most of a fresh context window?
+- Does it cross subsystem or concern boundaries?
+- Does it contain more than one meaningful implementation outcome?
+- Could any part be completed, tested, and committed independently?
+
+If any answer is yes, split the task unless that would create artificial sequencing or an unverifiable intermediate state. Do not target a fixed task count; optimize for the smallest independently valuable and verifiable unit of work, not the fewest tasks.
+
 Before writing, map every in-scope acceptance criterion and cross-cutting constraint to the single handoff or to one or more tasks. Use this coverage check to prevent omissions, but do not add a verbose traceability table unless it helps the implementation agents.
 
 ## Write initiative artifacts
@@ -82,8 +97,16 @@ Each handoff or task must contain the following, merging sections when that make
 
 Tell the implementation agent to inspect referenced code before editing and to report contradictions rather than silently changing settled decisions.
 
-For each Ralph-loop task, also include:
+For each Ralph-loop task, make all of these explicit:
 
+- **Single concrete outcome** — one independently valuable result, not a bundle of milestones.
+- **Scope and relevant files or components** — identify likely anchors when known.
+- **Non-goals** — especially adjacent work assigned to later tasks.
+- **Dependencies and prerequisites** — including prior outputs it consumes.
+- **Implementation guidance** — reuse the approach settled during design rather than reopening it.
+- **Objective acceptance criteria** — observable evidence for this task only.
+- **Focused validation** — exact or readily discoverable commands and checks proportionate to the change.
+- **Completion boundary** — state what this task finishes and what remains for later tasks.
 - **Completion check** — repository evidence that lets an agent detect the task is already complete and skip it safely.
 - **Handoff to the next task** — concrete artifacts, symbols, migrations, tests, or decisions the next task should reuse rather than rediscover.
 
@@ -107,6 +130,7 @@ Read every generated document as a fresh agent with no access to the conversatio
 - task dependencies and handoff artifacts are explicit;
 - no task reopens a settled decision or requires an unstated material decision;
 - validation can demonstrate both task-level and final completion;
+- every Ralph task passes the decomposition review, fits comfortably in one fresh context, has one concrete outcome, and states its completion boundary;
 - the initiative contains exactly one execution shape; and
 - for Ralph loops, `README.md`, `progress.md`, and every ordered file under `tasks/` agree on names, order, dependencies, and state.
 
