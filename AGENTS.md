@@ -8,11 +8,12 @@ When two or more skills are complementary or form a sequence, add a workflow sec
 
 ## Skill index
 
-- [grill-me](skills/grill-me/SKILL.md) — Stress-tests a proposal through a rigorous design interview and produces an implementation-ready design record.
-- [handoff](skills/handoff/SKILL.md) — Converts established context and design artifacts into self-contained implementation handoffs or ordered Ralph-loop tasks.
+- [grill-me](skills/grill-me/SKILL.md) — Stress-tests a proposal and persists a self-contained, implementation-ready design contract for a separate handoff session.
+- [handoff](skills/handoff/SKILL.md) — Reads a persisted design contract and creates a self-contained implementation brief or finely scoped ordered Ralph-loop tasks.
 
 ## Design-to-implementation workflow
 
-1. Use [grill-me](skills/grill-me/SKILL.md) while material product or technical decisions remain unresolved. It writes the self-contained design record to `.agent-artifacts/<initiative-slug>/design.md`, containing settled decisions, codebase anchors, acceptance criteria, risks, and blockers.
-2. Use [handoff](skills/handoff/SKILL.md) when the design is ready to transfer to fresh implementation sessions. Reuse `design.md` and its references; do not repeat broad exploration or reopen settled decisions. For one session, add `handoff.md`. For a Ralph loop, add `README.md`, `progress.md`, and ordered prompts under `tasks/`. These handoff shapes are mutually exclusive per initiative.
+1. Use [grill-me](skills/grill-me/SKILL.md) while material product or technical decisions remain unresolved. It writes `.agent-artifacts/<initiative-slug>/design.md` as the sole downstream design contract. The record includes settled decisions, durable codebase anchors, numbered acceptance criteria, constraints, risks, validation, and a dependency-aware implementation outline with independently verifiable seams.
+2. Start a separate context for [handoff](skills/handoff/SKILL.md), supplying the repository and path to `design.md`; do not carry over the design conversation. Handoff must read the complete persisted record, verify its anchors against current repository state, and preserve settled decisions rather than repeat broad exploration or redesign them.
+3. Choose exactly one execution shape per initiative: for one session, add `handoff.md`; for a Ralph loop, add `README.md`, `progress.md`, and ordered prompts under `tasks/`. Ralph tasks recursively refine the implementation outline into one-outcome, fresh-context-sized units with explicit dependencies, validation, completion boundaries, valid intermediate states, and complete acceptance-criteria coverage. Downstream tasks reuse prior outputs recorded in `progress.md` rather than rediscovering or recreating them.
 

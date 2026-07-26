@@ -1,137 +1,142 @@
 ---
 name: handoff
-description: Convert a grill-me design record that is ready for handoff into a self-contained implementation brief for one fresh session or ordered tasks for a Ralph loop. Use immediately after grill-me when implementation will continue without the current conversation. Do not use while material design decisions remain unresolved.
-argument-hint: "Optional implementation focus; optionally request one handoff or Ralph-loop tasks"
+description: Read a persisted grill-me design record and convert it, in a separate context, into a self-contained implementation brief or finely scoped ordered Ralph-loop tasks. Use when implementation must be transferred to fresh sessions from `.agent-artifacts/<initiative-slug>/design.md`. Do not use while material design decisions remain unresolved.
+argument-hint: "Path to design.md or initiative slug; optionally request one handoff or Ralph-loop tasks"
 disable-model-invocation: true
 ---
 
 # Handoff
 
-Transfer an implementation-ready design from the current conversation to fresh agents that cannot see it. Preserve the decisions established by `grill-me`; this skill packages the design for execution rather than reopening it or replacing it with a new plan.
+Package a persisted, implementation-ready design for execution by fresh agents. Preserve its decisions; do not reopen the design or substitute a new plan.
 
-## Confirm readiness
+Operate artifact-first. Assume no design-session conversation or repository findings remain in context. `design.md` is the authoritative design contract even if conversational context is present.
 
-Use the final `grill-me` design record already in the conversation as the primary input and check its declared readiness. Identify the initiative slug established by `grill-me` and verify that `.agent-artifacts/<initiative-slug>/design.md` exists for downstream agents. Do not reread the file when the complete final record is already in context. Read it only when the handoff runs in a later session, the conversation record is missing or ambiguous, or persisted-content validation is needed. If the slug is not known, inspect `.agent-artifacts/` for a clearly matching design; do not guess when multiple initiatives are plausible.
+## Load and verify the source
 
-Proceed only when the record is explicitly **ready for handoff** and no open question would force an implementer to choose product behavior, architecture, compatibility, risk posture, or acceptance semantics. Accepted risks and non-blocking assumptions may remain when their consequences are clear.
+Require a path to `.agent-artifacts/<initiative-slug>/design.md` or an unambiguous initiative slug. If neither is supplied, inspect `.agent-artifacts/` for a single clearly matching candidate; do not guess among multiple designs.
 
-If no usable final record is available, the record is marked **not ready for handoff**, it contains a material unresolved decision, or the persisted `design.md` is missing:
+Always read the complete persisted `design.md`. Check its declared readiness, then inspect the current repository and the durable anchors it names only enough to:
 
-- do not create handoff files;
-- identify the missing artifact or blocking decisions briefly; and
-- direct the user back to `grill-me` to persist or resolve them.
+- verify paths, symbols, tests, commands, and prerequisite outputs still exist or establish an explicitly recorded empty state;
+- understand the implementation seams and current completion state; and
+- make each execution prompt actionable.
 
-Do not silently upgrade assumptions into decisions merely to make the handoff possible.
+Do not depend on the original conversation and do not repeat broad design exploration. The repository may have changed since persistence, so never assume the design session's findings are still true without checking the anchors relevant to decomposition.
 
-## Reuse established context
+Proceed only when the artifact is explicitly **ready for handoff** and no open question would force an implementer to choose product behavior, architecture, compatibility, risk posture, or acceptance semantics. Accepted risks and non-blocking assumptions may remain when consequences are clear.
 
-Reuse the final in-context record's settled decisions, codebase anchors, acceptance criteria, constraints, risks, and blockers. The persisted `design.md` remains the durable authoritative source that generated prompts should direct implementation agents to read. If validation reveals that the conversation and persisted design differ materially, update the design through `grill-me` before packaging a handoff. If the user supplies arguments, use them to narrow the implementation focus without contradicting the record.
-
-Do not repeat broad repository exploration already performed by `grill-me`. Inspect only the referenced artifacts needed to make paths and symbols actionable or to account for repository changes made after the record was completed. If current evidence contradicts the record, flag the contradiction and stop rather than silently overturning the design.
-
-A handoff must be self-contained operationally: a fresh agent should know what outcome to produce, what to read, what is settled, how to validate the result, and when it is done. This does not require copying entire specifications, design records, ADRs, issues, commits, or diffs. Cite durable sources by path, symbol, commit, issue, or URL and summarize only the portions needed to execute correctly. Avoid fragile line-number references.
+Stop without creating handoff files when the artifact is missing, not ready, materially incomplete, or contradicted by current repository evidence. State the exact gap or contradiction and direct the user to update the design through `grill-me`. Do not silently promote assumptions, edit `design.md`, or make a product/design decision in order to package work.
 
 ## Choose the execution shape
 
-Create one `handoff.md` when the work has one coherent outcome and can reasonably fit in one fresh implementation session.
+Create one `handoff.md` only when all work has one concrete outcome and can comfortably be implemented, tested, and completed in one fresh context.
 
-Create ordered Ralph-loop tasks only when session boundaries, dependencies, risk, or independently verifiable milestones make decomposition useful. Each task must:
+Create ordered Ralph-loop tasks when the user requests them or when independently verifiable milestones, dependencies, risk, or context size warrant decomposition. Prefer the requested shape when feasible, but explain and reject a single-session shape that would be unsafe.
 
-- deliver one coherent, reviewable outcome rather than a horizontal layer of unfinished machinery;
-- state its dependencies and the artifacts it consumes from earlier tasks;
-- leave the repository in a valid state;
-- have validation that can run at that point; and
-- avoid repeating analysis or decisions assigned to another task.
+Before selecting the shape, inventory:
 
-Prefer the execution shape explicitly requested by the user when it remains feasible. Do not split work merely because the design record is long.
+1. every implementation-outline unit and dependency from `design.md`;
+2. every numbered acceptance criterion, constraint, invariant, non-goal, risk control, migration/operational requirement, and validation obligation; and
+3. current repository state and already completed work.
 
-### Size Ralph-loop tasks for fresh contexts
+Use this inventory as a coverage ledger. Map every item to the single handoff or one or more Ralph tasks. Keep the ledger while planning; include a compact coverage map in the Ralph `README.md` when it helps later auditing.
 
-Size each task so a fresh agent can read its references, implement it, add or update focused tests, run validation, and complete the handoff comfortably within one context window. As a conservative planning target, the expected work should consume no more than roughly 20–40% of a fresh context window; uncertainty and debugging need the remaining capacity.
+## Decompose Ralph work recursively
 
-Prefer vertical, independently valuable and verifiable increments. Keep tightly coupled code and its direct tests together, but split work when it crosses subsystems or concerns, combines unrelated production changes, migrations, refactors, documentation, or broad test work, or contains outcomes that can be implemented, tested, and committed independently. Do not combine work merely because it belongs to one feature. When substantial discovery or an unresolved implementation decision remains, create an ordered investigation or decision task before dependent implementation. Preserve real dependencies, and do not create trivial mechanical tasks or unverifiable intermediate states.
+Start from the design's natural implementation seams, not broad phases or a preferred task count. Produce vertical, independently reviewable increments. A foundational task is valid only when it delivers usable, tested infrastructure and leaves the repository valid; never create placeholder layers for later completion.
 
-Before finalizing a Ralph-loop decomposition, review every proposed task and ask:
+For every proposed task:
 
-- Could this reasonably consume most of a fresh context window?
-- Does it cross subsystem or concern boundaries?
-- Does it contain more than one meaningful implementation outcome?
-- Could any part be completed, tested, and committed independently?
+1. State its outcome in one sentence.
+2. List its production changes, direct tests, migration/configuration/documentation work, and validation.
+3. Identify dependencies, outputs reused later, and the practical commit boundary.
+4. Ask whether any listed part can be implemented, validated, and committed independently while preserving a valid repository.
+5. If yes, split it and repeat this review on each child task.
+6. If no, keep it together and make the coupling reason evident in the task prompt.
 
-If any answer is yes, split the task unless that would create artificial sequencing or an unverifiable intermediate state. Do not target a fixed task count; optimize for the smallest independently valuable and verifiable unit of work, not the fewest tasks.
+A task must be split or explicitly justified as indivisible when any of these signals appear:
 
-Before writing, map every in-scope acceptance criterion and cross-cutting constraint to the single handoff or to one or more tasks. Use this coverage check to prevent omissions, but do not add a verbose traceability table unless it helps the implementation agents.
+- its outcome joins independently observable capabilities with “and”;
+- it spans multiple public capabilities, subsystems, migrations, or operational concerns;
+- it combines reusable foundation work with a consumer that can be validated separately;
+- its acceptance criteria form disjoint validation groups;
+- it suggests more than one practical commit boundary;
+- it uses a coarse label such as “complete module,” “shared infrastructure,” “integration,” “release readiness,” or “all tests” without a narrower observable boundary; or
+- reading, implementation, focused tests, debugging, and validation could consume most of a fresh context.
+
+As a conservative target, expected task work should use roughly 20–40% of a fresh context, preserving capacity for repository reading and debugging. Prefer one public behavior or one tightly coupled internal capability plus its direct tests. Do not create trivial mechanical tasks, test-only cleanup detached from owned behavior, or intermediate states that fail established checks.
+
+Keep tightly coupled production code and direct tests together. Separate documentation, migration, package/release work, unrelated refactors, and broad contract validation when each has an independent done condition. Ordered tasks may depend on earlier tasks, but each must leave the repository valid and be independently committable where practical.
+
+A ready design should not require a new design task. Bounded implementation discovery may occur inside the task that consumes it, but if discovery could change settled behavior or architecture, stop and return the design for revision rather than adding a task that reopens it.
+
+After decomposition, run two audits:
+
+- **Task audit:** every task has one concrete outcome, focused criteria and validation, explicit dependencies, a completion check and boundary, a valid intermediate state, and no reopened decision.
+- **Coverage audit:** every inventory item is covered, no task contradicts another, and final end-to-end validation proves the complete design.
+
+If any task remains coarse, split it again. Do not optimize for the fewest tasks.
 
 ## Write initiative artifacts
 
-Write the handoff beside the design in `.agent-artifacts/<initiative-slug>/`. The user's invocation of this skill authorizes creation of the selected handoff shape. Inspect the initiative directory before writing and preserve `design.md` unchanged.
+Write beside the design in `.agent-artifacts/<initiative-slug>/`. Inspect the directory first and preserve `design.md` unchanged.
 
-The two execution shapes are mutually exclusive for an initiative:
+Execution shapes are mutually exclusive:
 
-- **Single session:** `.agent-artifacts/<initiative-slug>/design.md` and `.agent-artifacts/<initiative-slug>/handoff.md`. Do not create `README.md`, `progress.md`, or `tasks/`.
-- **Ralph loop:** `.agent-artifacts/<initiative-slug>/design.md`, `.agent-artifacts/<initiative-slug>/README.md`, `.agent-artifacts/<initiative-slug>/progress.md`, and ordered `.agent-artifacts/<initiative-slug>/tasks/task-01-<task-slug>.md`, `task-02-<task-slug>.md`, and so on. Do not create `handoff.md`.
+- **Single session:** `design.md` and `handoff.md`; no `README.md`, `progress.md`, or `tasks/`.
+- **Ralph loop:** `design.md`, `README.md`, `progress.md`, and ordered `tasks/task-01-<slug>.md`, `task-02-<slug>.md`, and so on; no `handoff.md`.
 
-If artifacts from the opposite shape already exist, stop and ask the user whether to remove them or use a different initiative slug; never leave both shapes in one initiative directory. Ask before overwriting an existing handoff of the selected shape unless the user explicitly requested regeneration or update.
+If opposite-shape artifacts exist, stop and ask whether to remove them or use another slug. Ask before overwriting selected-shape artifacts unless the user explicitly requested regeneration or update. Do not modify production code or repository documentation outside the initiative directory.
 
-Each task file is the complete prompt for one fresh Ralph iteration. A runner must be able to pass it to an agent without reconstructing context from the README, progress file, or conversation. The README orchestrates the sequence but is not a substitute for task-local instructions.
+Each task file is the complete prompt for one fresh iteration. It may direct the agent to read `design.md`, `progress.md`, prior outputs, and code, but must not require the README, original conversation, or an unstated finding to understand its work. Include the relevant settled decisions and boundaries locally instead of saying only “follow the design.” Avoid duplicating the entire design.
 
-Do not generate a shell runner or assume a particular Ralph command unless the user requests one and the repository provides an established runner convention. When requested, reference or wrap that convention rather than inventing a new execution interface.
+Do not generate a shell runner or assume a Ralph command unless requested and the repository has an established convention.
 
-Do not modify production code or repository documentation outside `.agent-artifacts/<initiative-slug>/` while producing the handoff.
+## Required execution-unit content
 
-## Required content
+Each handoff or task must include, merging sections when useful:
 
-Each handoff or task must contain the following, merging sections when that makes the document easier to use:
+- **Concrete outcome and current state** — one observable result and verified starting point.
+- **Required reading and anchors** — minimal ordered paths, symbols, tests, and commands; inspect before editing and report contradictions.
+- **Scope and owned components** — production behavior and direct supporting work.
+- **Non-goals** — especially adjacent work owned elsewhere.
+- **Settled decisions and constraints** — relevant interfaces, invariants, compatibility, failure behavior, and rationale where omission risks reversal.
+- **Dependencies and prerequisites** — prior task outputs, environment, and external dependencies without secrets.
+- **Implementation direction** — intended seams and reuse, preserving incidental discretion.
+- **Focused acceptance criteria** — only evidence attributable to this unit, linked to design criterion IDs where applicable.
+- **Focused validation** — exact or readily discoverable automated commands and distinct manual checks.
+- **Risks and assumptions** — only execution-relevant items; no design blocker.
+- **Completion check** — repository evidence to detect already-complete work safely.
+- **Completion boundary and done condition** — what is finished, what deliberately remains, and evidence required.
+- **Next-task handoff** — exact artifacts, symbols, migrations, tests, or discoveries downstream must reuse rather than recreate.
+- **Suggested skills** — only known available skills that materially help, with when and why; omit otherwise.
 
-- **Objective and current state** — the observable outcome and what already exists.
-- **Required reading and code anchors** — a minimal reading sequence, ordered so the agent encounters contracts and authoritative design sources before their consumers; include stable symbols, relevant tests, and commands.
-- **Scope** — what this execution unit owns.
-- **Non-goals** — what it intentionally excludes, kept separate from scope so exclusions are difficult to overlook.
-- **Settled decisions and constraints** — implementation-significant conclusions from the design record, including invariants, compatibility, and failure behavior where relevant.
-- **Dependencies and prerequisites** — prior task outputs, environmental needs, and external dependencies without secret values.
-- **Implementation direction** — natural seams and intended approach, while preserving legitimate implementation discretion.
-- **Acceptance criteria and validation** — externally verifiable outcomes and exact or discoverable validation commands. Distinguish automated checks from required manual verification.
-- **Risks, assumptions, and blockers** — only those still relevant to execution. A ready handoff must not contain a blocker that requires a new design decision.
-- **Suggested skills** — only skills known to be available and materially useful, with why and at what stage to invoke them. Omit this section when none are relevant.
-- **Done condition** — one consolidated statement defining the evidence required to declare the execution unit complete; it must agree with, not weaken, the acceptance criteria.
+For Ralph tasks, also require the agent to inspect Git status, mark the task `in progress` in `progress.md`, update it with exact outputs and validation after success, or record concrete blocker evidence before stopping. A task must not claim earlier work exists without checking repository evidence and progress.
 
-Tell the implementation agent to inspect referenced code before editing and to report contradictions rather than silently changing settled decisions.
+## Ralph orchestration files
 
-For each Ralph-loop task, make all of these explicit:
+`README.md` must contain the overall objective, authoritative references, ordered tasks, dependency graph, cross-task constraints, compact design-coverage map, and final end-to-end acceptance criteria/validation. State that each task file is one fresh iteration prompt and explain advancement only after its done condition passes. Keep task-local detail in task files.
 
-- **Single concrete outcome** — one independently valuable result, not a bundle of milestones.
-- **Scope and relevant files or components** — identify likely anchors when known.
-- **Non-goals** — especially adjacent work assigned to later tasks.
-- **Dependencies and prerequisites** — including prior outputs it consumes.
-- **Implementation guidance** — reuse the approach settled during design rather than reopening it.
-- **Objective acceptance criteria** — observable evidence for this task only.
-- **Focused validation** — exact or readily discoverable commands and checks proportionate to the change.
-- **Completion boundary** — state what this task finishes and what remains for later tasks.
-- **Completion check** — repository evidence that lets an agent detect the task is already complete and skip it safely.
-- **Handoff to the next task** — concrete artifacts, symbols, migrations, tests, or decisions the next task should reuse rather than rediscover.
-
-The Ralph-loop `README.md` must summarize the overall objective, shared authoritative references, execution order, dependency graph, cross-task constraints, and final end-to-end acceptance criteria. It must also state that each task file is the prompt for one fresh iteration and explain how to advance to the next file after the current task's done condition passes. Keep task-local detail in task files.
-
-Initialize the Ralph-loop `progress.md` as the durable overall execution state. Include the initiative status, current or next task, an ordered task checklist with `pending`/`in progress`/`complete`/`blocked` states, completed outputs and validation evidence, cross-task discoveries or deviations, blockers, and the next action. Start every task as `pending` and identify `task-01` as next; do not claim implementation progress that has not occurred. Instruct each iteration to mark its task `in progress` when it starts, then update `progress.md` after the completion check and done condition pass, or record a `blocked` state before stopping. Task prompts must use this file for execution state, not as a replacement for authoritative design decisions.
+Initialize `progress.md` as durable execution state with initiative status, current/next task, ordered checklist using `pending`/`in progress`/`complete`/`blocked`, completed outputs and validation evidence, cross-task discoveries/deviations, blockers, and next action. Start every task `pending` and `task-01` next; never invent implementation progress. `progress.md` records execution state, not design authority.
 
 ## Protect fidelity and privacy
 
-Do not invent missing decisions, broaden scope, or turn optional ideas into requirements. Preserve important rationale when omitting it would tempt an implementer to reverse a settled decision. Clearly distinguish facts, decisions, assumptions, accepted risks, and non-goals when ambiguity could affect execution.
+Do not invent missing decisions, broaden scope, turn optional ideas into requirements, or reopen settled decisions. Distinguish facts, decisions, assumptions, accepted risks, constraints, and non-goals where ambiguity affects execution. Preserve rationale when omission would encourage reversal.
 
 Do not include secrets, credential values, production customer data, or unrelated personally identifiable information.
 
-## Final check
+## Final fresh-context check
 
-Read every generated document as a fresh agent with no access to the conversation. Confirm that:
+Reread `design.md` and every generated file from disk while assuming no conversation exists. Confirm:
 
-- the objective, boundaries, implementation direction, and done conditions are executable;
-- all in-scope acceptance criteria and constraints from the design record are covered;
-- references are durable and sufficient without duplicating source documents;
-- task dependencies and handoff artifacts are explicit;
-- no task reopens a settled decision or requires an unstated material decision;
-- validation can demonstrate both task-level and final completion;
-- every Ralph task passes the decomposition review, fits comfortably in one fresh context, has one concrete outcome, and states its completion boundary;
-- the initiative contains exactly one execution shape; and
-- for Ralph loops, `README.md`, `progress.md`, and every ordered file under `tasks/` agree on names, order, dependencies, and state.
+- the source artifact alone supports the decomposition;
+- every task has one outcome and fits comfortably in one fresh context;
+- task criteria, validation, dependencies, reusable outputs, completion check, and completion boundary are explicit;
+- every intermediate repository state is valid and independently committable where practical;
+- no task repeats broad discovery or reopens design decisions;
+- implementation-outline units, constraints, and acceptance criteria have complete coverage;
+- references are durable and task-local prompts contain essential decisions;
+- exactly one execution shape exists; and
+- Ralph README, progress, and task files agree on names, order, dependencies, coverage, and state.
 
-Report whether a single-session handoff or Ralph-loop set was created and list every exact path created.
+Report the shape created and every exact path. If validation exposes coarse tasks or missing design detail, refine the decomposition or stop for a `design.md` revision rather than accepting the gap.
