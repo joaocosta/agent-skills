@@ -13,6 +13,6 @@ When two or more skills are complementary or form a sequence, add a workflow sec
 
 ## Design-to-implementation workflow
 
-1. Use [grill-me](skills/grill-me/SKILL.md) while material product or technical decisions remain unresolved. Its handoff artifact is the self-contained design record containing settled decisions, codebase anchors, acceptance criteria, risks, and blockers.
-2. Use [handoff](skills/handoff/SKILL.md) when the design is ready to transfer to a fresh implementation session. Reuse the design record and its references; do not repeat broad exploration or reopen settled decisions. Split work into ordered tasks only when it cannot fit coherently in one session.
+1. Use [grill-me](skills/grill-me/SKILL.md) while material product or technical decisions remain unresolved. It writes the self-contained design record to `.agent-artifacts/<initiative-slug>/design.md`, containing settled decisions, codebase anchors, acceptance criteria, risks, and blockers.
+2. Use [handoff](skills/handoff/SKILL.md) when the design is ready to transfer to fresh implementation sessions. Reuse `design.md` and its references; do not repeat broad exploration or reopen settled decisions. For one session, add `handoff.md`. For a Ralph loop, add `README.md`, `progress.md`, and ordered prompts under `tasks/`. These handoff shapes are mutually exclusive per initiative.
 

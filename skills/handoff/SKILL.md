@@ -11,21 +11,21 @@ Transfer an implementation-ready design from the current conversation to fresh a
 
 ## Confirm readiness
 
-Find the final `grill-me` design record in the conversation and check its declared readiness.
+Use the final `grill-me` design record already in the conversation as the primary input and check its declared readiness. Identify the initiative slug established by `grill-me` and verify that `.agent-artifacts/<initiative-slug>/design.md` exists for downstream agents. Do not reread the file when the complete final record is already in context. Read it only when the handoff runs in a later session, the conversation record is missing or ambiguous, or persisted-content validation is needed. If the slug is not known, inspect `.agent-artifacts/` for a clearly matching design; do not guess when multiple initiatives are plausible.
 
 Proceed only when the record is explicitly **ready for handoff** and no open question would force an implementer to choose product behavior, architecture, compatibility, risk posture, or acceptance semantics. Accepted risks and non-blocking assumptions may remain when their consequences are clear.
 
-If the record is absent, marked **not ready for handoff**, or contains a material unresolved decision:
+If no usable final record is available, the record is marked **not ready for handoff**, it contains a material unresolved decision, or the persisted `design.md` is missing:
 
 - do not create handoff files;
-- identify the missing or blocking decisions briefly; and
-- direct the user back to `grill-me` to resolve them.
+- identify the missing artifact or blocking decisions briefly; and
+- direct the user back to `grill-me` to persist or resolve them.
 
 Do not silently upgrade assumptions into decisions merely to make the handoff possible.
 
 ## Reuse established context
 
-Treat the final design record as the authoritative handoff input. Reuse its settled decisions, codebase anchors, acceptance criteria, constraints, risks, and blockers. If the user supplies arguments, use them to narrow the implementation focus without contradicting the record.
+Reuse the final in-context record's settled decisions, codebase anchors, acceptance criteria, constraints, risks, and blockers. The persisted `design.md` remains the durable authoritative source that generated prompts should direct implementation agents to read. If validation reveals that the conversation and persisted design differ materially, update the design through `grill-me` before packaging a handoff. If the user supplies arguments, use them to narrow the implementation focus without contradicting the record.
 
 Do not repeat broad repository exploration already performed by `grill-me`. Inspect only the referenced artifacts needed to make paths and symbols actionable or to account for repository changes made after the record was completed. If current evidence contradicts the record, flag the contradiction and stop rather than silently overturning the design.
 
@@ -47,16 +47,22 @@ Prefer the execution shape explicitly requested by the user when it remains feas
 
 Before writing, map every in-scope acceptance criterion and cross-cutting constraint to the single handoff or to one or more tasks. Use this coverage check to prevent omissions, but do not add a verbose traceability table unless it helps the implementation agents.
 
-## Write outside the repository
+## Write initiative artifacts
 
-Create a new uniquely named directory beneath the operating system's temporary directory, never in the workspace. Do not overwrite a prior handoff.
+Write the handoff beside the design in `.agent-artifacts/<initiative-slug>/`. The user's invocation of this skill authorizes creation of the selected handoff shape. Inspect the initiative directory before writing and preserve `design.md` unchanged.
 
-- For one session, write `<temporary-directory>/<unique-handoff-directory>/handoff.md`.
-- For a Ralph loop, write `<temporary-directory>/<unique-handoff-directory>/README.md` plus `task-01-<slug>.md`, `task-02-<slug>.md`, and so on. Each task file is the complete prompt for one fresh Ralph iteration; the runner should be able to pass it to an agent without reconstructing context from the README or conversation. The README orchestrates the sequence but is not a substitute for task-local instructions.
+The two execution shapes are mutually exclusive for an initiative:
+
+- **Single session:** `.agent-artifacts/<initiative-slug>/design.md` and `.agent-artifacts/<initiative-slug>/handoff.md`. Do not create `README.md`, `progress.md`, or `tasks/`.
+- **Ralph loop:** `.agent-artifacts/<initiative-slug>/design.md`, `.agent-artifacts/<initiative-slug>/README.md`, `.agent-artifacts/<initiative-slug>/progress.md`, and ordered `.agent-artifacts/<initiative-slug>/tasks/task-01-<task-slug>.md`, `task-02-<task-slug>.md`, and so on. Do not create `handoff.md`.
+
+If artifacts from the opposite shape already exist, stop and ask the user whether to remove them or use a different initiative slug; never leave both shapes in one initiative directory. Ask before overwriting an existing handoff of the selected shape unless the user explicitly requested regeneration or update.
+
+Each task file is the complete prompt for one fresh Ralph iteration. A runner must be able to pass it to an agent without reconstructing context from the README, progress file, or conversation. The README orchestrates the sequence but is not a substitute for task-local instructions.
 
 Do not generate a shell runner or assume a particular Ralph command unless the user requests one and the repository provides an established runner convention. When requested, reference or wrap that convention rather than inventing a new execution interface.
 
-Do not modify production code or repository documentation while producing the handoff.
+Do not modify production code or repository documentation outside `.agent-artifacts/<initiative-slug>/` while producing the handoff.
 
 ## Required content
 
@@ -83,6 +89,8 @@ For each Ralph-loop task, also include:
 
 The Ralph-loop `README.md` must summarize the overall objective, shared authoritative references, execution order, dependency graph, cross-task constraints, and final end-to-end acceptance criteria. It must also state that each task file is the prompt for one fresh iteration and explain how to advance to the next file after the current task's done condition passes. Keep task-local detail in task files.
 
+Initialize the Ralph-loop `progress.md` as the durable overall execution state. Include the initiative status, current or next task, an ordered task checklist with `pending`/`in progress`/`complete`/`blocked` states, completed outputs and validation evidence, cross-task discoveries or deviations, blockers, and the next action. Start every task as `pending` and identify `task-01` as next; do not claim implementation progress that has not occurred. Instruct each iteration to mark its task `in progress` when it starts, then update `progress.md` after the completion check and done condition pass, or record a `blocked` state before stopping. Task prompts must use this file for execution state, not as a replacement for authoritative design decisions.
+
 ## Protect fidelity and privacy
 
 Do not invent missing decisions, broaden scope, or turn optional ideas into requirements. Preserve important rationale when omitting it would tempt an implementer to reverse a settled decision. Clearly distinguish facts, decisions, assumptions, accepted risks, and non-goals when ambiguity could affect execution.
@@ -97,7 +105,9 @@ Read every generated document as a fresh agent with no access to the conversatio
 - all in-scope acceptance criteria and constraints from the design record are covered;
 - references are durable and sufficient without duplicating source documents;
 - task dependencies and handoff artifacts are explicit;
-- no task reopens a settled decision or requires an unstated material decision; and
-- validation can demonstrate both task-level and final completion.
+- no task reopens a settled decision or requires an unstated material decision;
+- validation can demonstrate both task-level and final completion;
+- the initiative contains exactly one execution shape; and
+- for Ralph loops, `README.md`, `progress.md`, and every ordered file under `tasks/` agree on names, order, dependencies, and state.
 
-Report whether a single handoff or Ralph-loop set was created and list every exact path created.
+Report whether a single-session handoff or Ralph-loop set was created and list every exact path created.

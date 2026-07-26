@@ -31,6 +31,8 @@ Use these distinctions:
 
 Maintain a compact design record in the conversation from the start. Record conclusions and evidence, not the dialogue. Replace superseded conclusions rather than retaining contradictions. Preserve rejected alternatives only when their rationale would prevent costly reconsideration.
 
+Use a stable, lowercase kebab-case initiative slug derived from the agreed scope. Once the initiative is clear, identify the eventual durable artifact as `.agent-artifacts/<initiative-slug>/design.md`. Reuse the same slug throughout the interview and state it at major checkpoints so the user can correct it before persistence. Inspect an existing initiative directory before writing; do not overwrite an unrelated design that happens to share the slug.
+
 After each answer, show the changed conclusions briefly. Reprint the full compact record only at major checkpoints, on request, or at completion.
 
 The record must be self-contained for an implementation agent without access to the conversation. Capture, when material:
@@ -50,7 +52,9 @@ Do not mechanically cover every category; include only what could affect impleme
 
 Do not request or record secrets, credentials, production customer data, or unrelated personal information.
 
-Do not create or modify repository files without explicit approval. If a durable record would help, inspect repository conventions, propose a path, and ask permission. Inspect an existing document before proposing to replace it.
+The durable design artifact belongs at `.agent-artifacts/<initiative-slug>/design.md` in the repository. Write it when the interview completes, including when the record is **not ready for handoff** because the user stops early or blockers remain. The user's invocation of this skill authorizes creation of that artifact; ask before replacing an existing design unless the user explicitly requested its update. Create only the initiative directory and `design.md`: `handoff.md`, `README.md`, `progress.md`, and `tasks/` belong to `handoff`.
+
+Do not modify production code or other repository documentation while conducting the interview. Do not put initiative artifacts in a temporary directory.
 
 ## Run the interview
 
@@ -92,6 +96,11 @@ Accepted risks may remain only when their consequence and owner are explicit and
 
 If blocked or the user ends the interview early, provide the current record and mark it **not ready for handoff**. List each blocker and the decision, owner, or evidence needed to resolve it.
 
-At completion, provide the final record, state its readiness, and list remaining non-blocking assumptions and accepted risks.
+At completion:
+
+1. Render the final, self-contained record with its readiness status in the document itself.
+2. Write it to `.agent-artifacts/<initiative-slug>/design.md`, creating the initiative directory if needed.
+3. Reread the persisted file to ensure it preserves the final decisions, evidence, acceptance criteria, risks, assumptions, blockers, and readiness accurately.
+4. Provide the final record or a concise summary, state its readiness, list remaining non-blocking assumptions and accepted risks, and report the exact artifact path.
 
 Do not implement production code or perform detailed task decomposition unless the user explicitly asks to leave the interview and proceed.
