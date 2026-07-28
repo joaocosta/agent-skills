@@ -2,6 +2,7 @@
 name: agents-md-comparator
 description: Compare two alternative AGENTS.md instruction bundles against the same repository using static analysis and isolated empirical Pi coding-agent runs, then generate a self-contained evidence viewer for human review. Use when choosing between competing AGENTS.md files or instruction hierarchies. Do not use for comparing ordinary implementation branches or documents unrelated to coding-agent instructions.
 disable-model-invocation: true
+compatibility: Requires uv, Pi, and git.
 ---
 
 # AGENTS.md Comparator
@@ -40,12 +41,16 @@ Resolve paths before running anything. Confirm each option has a root `AGENTS.md
 
 The runner creates a fresh temporary repository for every option/task pair, overlays the selected bundle, commits that baseline, and runs Pi only there. It must not execute generated tasks in the source repository.
 
+## Runner invocation
+
+The runner is a [PEP 723](https://peps.python.org/pep-0723/) `uv` script. Invoke it with `uv run --script` so `uv` resolves `tiktoken` in its managed cache without modifying the repository or creating a project virtual environment. Do not invoke it with `python` or `python3`, install dependencies manually, or create a venv. If `uv` is unavailable, stop and ask the user to install it rather than changing their environment.
+
 ## Phase 1: prepare evidence and proposed evals
 
 Run:
 
 ```bash
-skills/agents-md-comparator/scripts/compare_agents.py prepare \
+uv run --quiet --script skills/agents-md-comparator/scripts/compare_agents.py prepare \
   --repo <base-repository> \
   --option-a <option-a-directory> \
   --option-b <option-b-directory> \
@@ -77,7 +82,7 @@ Do not create artificial tasks whose only purpose is to reward wording unique to
 After explicit approval, run:
 
 ```bash
-skills/agents-md-comparator/scripts/compare_agents.py run \
+uv run --quiet --script skills/agents-md-comparator/scripts/compare_agents.py run \
   --workspace <output-directory> \
   --approved \
   [--provider <provider>] [--model <model>] [--thinking <level>] \

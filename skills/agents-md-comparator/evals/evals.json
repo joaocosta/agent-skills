@@ -8,6 +8,7 @@
       "files": ["evals/files/basic"],
       "expectations": [
         "The response identifies the base repository and both instruction bundle paths and uses an isolated comparison workspace.",
+        "The runner is invoked with `uv run --script`, not `python` or `python3`; no dependency installation or project virtual environment is attempted.",
         "prepare creates manifest.json, static-analysis.json, evals.json, and review.html.",
         "The static evidence and review page report o200k_base token counts for each root AGENTS.md and its directly referenced local files.",
         "The response presents all proposed empirical evals and explicitly asks for additions, removals, revisions, or approval.",

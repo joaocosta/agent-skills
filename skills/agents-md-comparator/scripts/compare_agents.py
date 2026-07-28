@@ -27,7 +27,16 @@ import time
 from pathlib import Path
 from typing import Any
 
-import tiktoken
+try:
+    import tiktoken
+except ModuleNotFoundError as exc:
+    if exc.name != "tiktoken":
+        raise
+    raise SystemExit(
+        "error: this is a uv-managed script; run it as "
+        "`uv run --quiet --script path/to/compare_agents.py ...`. "
+        "Do not install tiktoken manually or create a virtual environment."
+    ) from None
 
 TEXT_SUFFIXES = {
     "", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg",
