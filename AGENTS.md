@@ -8,6 +8,7 @@ When two or more skills are complementary or form a sequence, add a workflow sec
 
 ## Skill index
 
+- [agents-md-comparator](skills/agents-md-comparator/SKILL.md) — Compares two AGENTS.md instruction bundles through static analysis and isolated empirical Pi runs, producing evidence for human review.
 - [grill-me](skills/grill-me/SKILL.md) — Stress-tests a proposal and persists a self-contained, implementation-ready design contract for a separate handoff session.
 - [handoff](skills/handoff/SKILL.md) — Reads a persisted design contract and creates a self-contained implementation brief or finely scoped ordered Ralph-loop tasks.
 

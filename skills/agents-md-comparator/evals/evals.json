@@ -1,0 +1,29 @@
+{
+  "skill_name": "agents-md-comparator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Compare `evals/files/basic/option-a` and `evals/files/basic/option-b` as AGENTS.md bundles for `evals/files/basic/repo`. Put artifacts in `.agent-artifacts/basic-agents-comparison`. I want static and empirical evidence, but do not spend money on empirical runs until I approve the proposed evals.",
+      "expected_output": "The skill runs only the prepare phase, reports the generated static evidence and review page, presents every proposed empirical eval with purpose and validation, and waits for explicit approval without running either option on an empirical task.",
+      "files": ["evals/files/basic"],
+      "expectations": [
+        "The response identifies the base repository and both instruction bundle paths and uses an isolated comparison workspace.",
+        "prepare creates manifest.json, static-analysis.json, evals.json, and review.html.",
+        "The response presents all proposed empirical evals and explicitly asks for additions, removals, revisions, or approval.",
+        "No empirical option/task run artifacts are created before user approval.",
+        "The source repository and both source option directories remain unchanged."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I have two competing AGENTS.md approaches somewhere in this repository. Compare them and tell me which one is better.",
+      "expected_output": "The skill requests the missing base-repository and two option-directory paths instead of guessing, running broad searches, or declaring a winner without evidence.",
+      "files": [],
+      "expectations": [
+        "The response asks for the base repository path, option A directory, and option B directory.",
+        "The response does not run prepare or empirical evaluations without resolved inputs.",
+        "The response frames the result as evidence for the user rather than promising an automatic winner."
+      ]
+    }
+  ]
+}
