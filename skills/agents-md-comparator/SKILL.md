@@ -94,12 +94,16 @@ Use one run per option per task. Keep provider, model, thinking level, tools, ti
 The runner stores, for each task and option:
 
 - Pi's event stream and final response;
-- elapsed time and available usage data;
+- elapsed time;
+- provider-reported token usage summed across every model response in the run;
+- total tool calls, per-tool call counts, and tool errors;
 - repository status and patch;
 - validation command outputs;
 - execution errors and timeouts.
 
-It then performs a blind Pi comparison with randomized A/B labels. Blind judgments are supporting evidence, not the user's decision. Preserve ties and evaluator uncertainty rather than forcing a winner.
+It also writes `empirical-summary.json` with per-option token, tool-call, error, and elapsed-time aggregates. Missing provider usage remains visibly missing rather than being treated as zero.
+
+It then performs a blind Pi comparison with randomized A/B labels. The grader may use token usage, tool calls, and elapsed time as efficiency evidence, but only after considering correctness, validation, and task completeness. Blind judgments are supporting evidence, not the user's decision. Preserve ties and evaluator uncertainty rather than forcing a winner.
 
 ## Review the result
 
@@ -108,7 +112,8 @@ The completed `review.html` must expose:
 - both snapshotted instruction bundles;
 - static findings with file-level evidence;
 - all approved task prompts and validation rules;
-- side-by-side responses, patches, validation results, timing, and usage;
+- side-by-side responses, patches, validation results, timing, summed token usage, and tool-call counts by tool;
+- cross-eval efficiency aggregates for each option, with usage-coverage counts;
 - blind-grader findings with the hidden labels revealed only in the report;
 - aggregate factual summaries without an automatic final recommendation.
 
@@ -120,7 +125,9 @@ Open or report the exact path to `review.html`. Summarize material evidence and 
 - Do not reward an option merely for mentioning more topics.
 - Do not penalize omitted facts that a competent agent can cheaply and reliably infer.
 - Penalize wrong instructions more heavily than missing convenience guidance.
-- Treat token count as context, not a quality score. Counts use tiktoken's `o200k_base` encoding as a rough usage estimate.
+- Treat token usage and tool-call count as efficiency context, not standalone quality scores. Prefer fewer only when compared results are similarly correct and complete; extra work may be justified by materially better evidence or outcomes.
+- Distinguish static bundle counts from empirical usage: static counts use tiktoken's `o200k_base` encoding as a rough size estimate, while run usage is provider-reported and summed across model responses.
+- Treat missing token usage as unavailable, never as zero.
 - Attribute performance differences cautiously when patches are both correct.
 - Report contamination, failed validation, malformed evaluator output, timeout, or missing evidence prominently.
 - Never silently regenerate approved evals during `run`.

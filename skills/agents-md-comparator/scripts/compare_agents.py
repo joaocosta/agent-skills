@@ -287,9 +287,21 @@ def final_response(event_stream: str) -> str:
     return final
 
 
+def add_numeric_totals(target: dict[str, Any], values: dict[str, Any]) -> None:
+    """Recursively sum provider-reported usage fields without inventing missing data."""
+    for key, value in values.items():
+        if isinstance(value, dict):
+            nested = target.setdefault(key, {})
+            if isinstance(nested, dict):
+                add_numeric_totals(nested, value)
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            target[key] = target.get(key, 0) + value
+
+
 def event_metrics(event_stream: str) -> dict[str, Any]:
-    usage: dict[str, Any] | None = None
-    tool_calls = 0
+    usage: dict[str, Any] = {}
+    model_responses = 0
+    tool_calls_by_name: dict[str, int] = {}
     tool_errors = 0
     for line in event_stream.splitlines():
         try:
@@ -297,13 +309,27 @@ def event_metrics(event_stream: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             continue
         if event.get("type") == "tool_execution_end":
-            tool_calls += 1
+            name = str(event.get("toolName") or "unknown")
+            tool_calls_by_name[name] = tool_calls_by_name.get(name, 0) + 1
             tool_errors += int(bool(event.get("isError")))
         if event.get("type") == "message_end":
-            message = event.get("message", {})
-            if message.get("role") == "assistant" and isinstance(message.get("usage"), dict):
-                usage = message["usage"]
-    return {"usage": usage, "tool_calls": tool_calls, "tool_errors": tool_errors}
+            message_usage = event.get("message", {}).get("usage")
+            if isinstance(message_usage, dict):
+                add_numeric_totals(usage, message_usage)
+                model_responses += 1
+        if event.get("type") == "compaction_end":
+            compaction_usage = (event.get("result") or {}).get("usage")
+            if isinstance(compaction_usage, dict):
+                add_numeric_totals(usage, compaction_usage)
+                model_responses += 1
+    return {
+        "usage": usage or None,
+        "total_tokens": usage.get("totalTokens") if usage else None,
+        "model_responses": model_responses,
+        "tool_calls": sum(tool_calls_by_name.values()),
+        "tool_calls_by_name": tool_calls_by_name,
+        "tool_errors": tool_errors,
+    }
 
 
 def parse_json_response(response: str) -> Any:
@@ -522,7 +548,7 @@ Expected evidence: {json.dumps(task.get('expected_evidence', []))}
 Candidate A: {run_root / ('option-' + mapping['A'])}
 Candidate B: {run_root / ('option-' + mapping['B'])}
 
-Judge correctness, completeness, validation, appropriate repository changes, efficiency, and whether durable instructions were maintained only when warranted. A concise correct result can beat a verbose one. Failed commands and unsupported claims count against a candidate. Do not infer hidden identities. A tie is allowed.
+Judge correctness, completeness, validation, appropriate repository changes, efficiency, and whether durable instructions were maintained only when warranted. Consult metrics.json for provider-reported total token usage, elapsed time, and tool-call counts. Use efficiency as supporting evidence after correctness rather than treating fewer tokens or calls as an automatic win; extra work can be justified when it produces materially better results. A concise correct result can beat a verbose one. Failed commands and unsupported claims count against a candidate. Do not infer hidden identities. A tie is allowed.
 
 Return only JSON:
 {{"winner": "A|B|TIE", "reasoning": "evidence-based explanation", "candidate_a": {{"strengths": [], "weaknesses": []}}, "candidate_b": {{"strengths": [], "weaknesses": []}}, "uncertainties": []}}"""
@@ -590,6 +616,7 @@ def run(args: argparse.Namespace) -> None:
             grade["task_id"] = task["id"]
             grades.append(grade)
     (workspace / "blind-grades.json").write_text(json.dumps({"grades": grades}, indent=2) + "\n")
+    (workspace / "empirical-summary.json").write_text(json.dumps(summarize_empirical_runs(workspace), indent=2) + "\n")
     manifest["status"] = "complete-with-errors" if errors else "complete"
     manifest["run_finished_at"] = now_iso()
     manifest["errors"] = errors
@@ -603,6 +630,36 @@ def load_json(path: Path) -> Any:
         return json.loads(path.read_text())
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def summarize_empirical_runs(workspace: Path) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    for option in ("a", "b"):
+        metrics = [
+            loaded for path in sorted((workspace / "runs").glob(f"eval-*/option-{option}/metrics.json"))
+            if isinstance((loaded := load_json(path)), dict)
+        ]
+        token_values = [m["total_tokens"] for m in metrics if isinstance(m.get("total_tokens"), (int, float))]
+        elapsed_values = [m["elapsed_seconds"] for m in metrics if isinstance(m.get("elapsed_seconds"), (int, float))]
+        tool_counts: dict[str, int] = {}
+        for metric in metrics:
+            for name, count in metric.get("tool_calls_by_name", {}).items():
+                tool_counts[name] = tool_counts.get(name, 0) + count
+        options[option] = {
+            "completed_runs": len(metrics),
+            "runs_with_token_usage": len(token_values),
+            "total_tokens": sum(token_values) if token_values else None,
+            "mean_tokens_per_run": round(sum(token_values) / len(token_values), 1) if token_values else None,
+            "total_tool_calls": sum(m.get("tool_calls", 0) for m in metrics),
+            "mean_tool_calls_per_run": round(sum(m.get("tool_calls", 0) for m in metrics) / len(metrics), 1) if metrics else None,
+            "tool_calls_by_name": tool_counts,
+            "tool_errors": sum(m.get("tool_errors", 0) for m in metrics),
+            "mean_elapsed_seconds": round(sum(elapsed_values) / len(elapsed_values), 3) if elapsed_values else None,
+        }
+    return {
+        "options": options,
+        "note": "Token totals sum provider-reported usage across model responses in each run. Compare efficiency only alongside correctness and validation; task aggregates do not measure run-to-run variance.",
+    }
 
 
 def bundle_contents(root: Path) -> list[dict[str, str]]:
@@ -619,6 +676,7 @@ def generate_html(workspace: Path) -> None:
         "static": load_json(workspace / "static-analysis.json"),
         "evals": load_json(workspace / "evals.json"),
         "grades": load_json(workspace / "blind-grades.json"),
+        "empirical_summary": load_json(workspace / "empirical-summary.json"),
         "bundles": {
             "option_a": bundle_contents(workspace / "inputs" / "option-a"),
             "option_b": bundle_contents(workspace / "inputs" / "option-b"),
@@ -648,13 +706,14 @@ body{{font:14px system-ui,sans-serif;margin:0;color:#202124;background:#f6f7f9}}
 <main><section id="overview" class="active"></section><section id="static"></section><section id="evals"></section><section id="runs"></section><section id="bundles"></section><section id="feedback"></section></main>
 <script>const D={encoded};const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));const pre=x=>`<pre>${{esc(typeof x==='string'?x:JSON.stringify(x,null,2))}}</pre>`;const card=(h,x)=>`<div class="card"><h3>${{esc(h)}}</h3>${{x}}</div>`;
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{{document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));document.getElementById(b.dataset.tab).classList.add('active')}});
-document.getElementById('overview').innerHTML=card('Manifest',pre(D.manifest))+`<p class="muted">This report presents evidence rather than an automatic recommendation. One run per task does not measure model variance.</p>`;
+const empiricalSummary=()=>{{const opts=D.empirical_summary?.options||{{}};const one=(key,label)=>{{const x=opts[key]||{{}};return card(label,`<div class="metric-grid"><div class="metric"><b>${{x.total_tokens??'—'}}</b>total tokens</div><div class="metric"><b>${{x.mean_tokens_per_run??'—'}}</b>mean tokens/run</div><div class="metric"><b>${{x.total_tool_calls??'—'}}</b>tool calls</div><div class="metric"><b>${{x.mean_elapsed_seconds??'—'}}</b>mean seconds</div></div><p><b>Tools:</b> ${{esc(JSON.stringify(x.tool_calls_by_name||{{}}))}} · <b>Tool errors:</b> ${{x.tool_errors??'—'}} · <b>Usage coverage:</b> ${{x.runs_with_token_usage??0}}/${{x.completed_runs??0}} runs</p>`)}};return `<div class="grid">${{one('a','Option A empirical efficiency')}}${{one('b','Option B empirical efficiency')}}</div><p class="muted">${{esc(D.empirical_summary?.note||'')}}</p>`}};
+document.getElementById('overview').innerHTML=card('Manifest',pre(D.manifest))+(D.empirical_summary?card('Empirical efficiency summary',empiricalSummary()):'')+`<p class="muted">This report presents evidence rather than an automatic recommendation. One run per task does not measure model variance.</p>`;
 const findingText=x=>typeof x==='string'?x:(x?.claim||x?.text||JSON.stringify(x));
 const findings=xs=>!xs?.length?'<p class="muted">None reported.</p>':xs.map(x=>{{const sev=typeof x==='object'?(x.severity||'') : '';const ev=typeof x==='object'?x.evidence:'';return `<div class="finding ${{esc(sev)}}">${{sev?`<span class="badge">${{esc(sev)}}</span>`:''}}<div>${{esc(findingText(x))}}</div>${{ev?`<div class="evidence"><b>Evidence:</b> ${{esc(ev)}}</div>`:''}}</div>`}}).join('');
 const bundleStatic=(key,label)=>{{const d=D.static?.deterministic?.[key]||{{}};const q=D.static?.qualitative?.[key]||{{}};const s=d.summary||{{}};const metrics=`<div class="metric-grid"><div class="metric"><b>${{s.agents_md_tokens??'—'}}</b>AGENTS.md tokens</div><div class="metric"><b>${{s.referenced_tokens??'—'}}</b>referenced-file tokens</div><div class="metric"><b>${{s.tokens??'—'}}</b>bundle tokens</div><div class="metric"><b>${{s.files??'—'}}</b>bundle files</div></div>`;const links=(d.markdown_links_from_agents||[]).map(x=>`<div>${{x.exists===false?'⚠️':x.exists===true?'✓':'↗'}} <code>${{esc(x.target)}}</code> <span class="muted">(${{esc(x.kind)}}${{Number.isInteger(x.tokens)?`, ${{x.tokens}} tokens`:''}})</span></div>`).join('')||'<p class="muted">No Markdown links found in root AGENTS.md.</p>';return card(label,metrics+`<div class="subsection"><h3>Strengths</h3>${{findings(q.strengths)}}</div><div class="subsection"><h3>Weaknesses</h3>${{findings(q.weaknesses)}}</div><div class="subsection"><h3>Staleness risks</h3>${{findings(q.staleness_risks)}}</div><div class="subsection"><h3>Self-maintenance</h3>${{findings(q.self_maintenance)}}</div><div class="subsection"><h3>Referenced documentation</h3>${{links}}</div><div class="subsection"><h3>Mechanical staleness indicators</h3>${{findings((d.possible_staleness_indicators||[]).map(x=>({{claim:`${{x.kind}} at line ${{x.line}}: ${{x.text}}`,severity:'review'}})))}}</div>`);}};
 const q=D.static?.qualitative||{{}};let staticHtml=`<div class="grid">${{bundleStatic('option_a','Option A')}}${{bundleStatic('option_b','Option B')}}</div>`;staticHtml+=card('Cross-option findings',findings(q.cross_option_findings));staticHtml+=`<div class="grid">${{card('Repository mismatches',findings(q.repository_mismatches))}}${{card('Uncertainties',findings(q.uncertainties))}}</div>`;if(D.static?.qualitative_error)staticHtml+=card('Static evaluator error',`<p class="bad">${{esc(D.static.qualitative_error)}}</p>`);if(D.grades?.grades?.length)staticHtml+=card('Blind empirical grades',D.grades.grades.map(g=>`<div class="finding"><b>Eval ${{esc(g.task_id)}}:</b> ${{esc(g.winner_option||'undetermined')}}<div>${{esc(g.reasoning||g.error||'')}}</div></div>`).join(''));document.getElementById('static').innerHTML=staticHtml;
 document.getElementById('evals').innerHTML=(D.evals?.evals||[]).map(e=>card(`Eval ${{e.id}} — ${{e.name}}`,`<b>Prompt</b>${{pre(e.prompt)}}<b>Purpose</b><p>${{esc(e.purpose)}}</p><b>Expected evidence</b>${{pre(e.expected_evidence)}}<b>Validation</b>${{pre(e.validation_commands)}}<p class="muted">${{esc(e.review_notes)}}</p>`)).join('')||card('No evals','No evals generated.');
-let runs='';for(const [id,opts] of Object.entries(D.runs||{{}})){{runs+=`<h2>${{esc(id)}}</h2><div class="grid">`;for(const key of ['option-a','option-b']){{const r=opts[key]||{{}};runs+=card(key,`<b>Response</b>${{pre(r.response)}}<b>Status</b>${{pre(r.status)}}<b>Patch</b>${{pre(r.patch)}}<b>Metrics and validation</b>${{pre(r.metrics)}}${{r.stderr?'<b>stderr</b>'+pre(r.stderr):''}}`)}}runs+='</div>'}}document.getElementById('runs').innerHTML=runs||card('Not run yet','Approve the proposed eval set before empirical execution.');
+let runs=D.empirical_summary?card('Cross-eval efficiency',empiricalSummary()):'';for(const [id,opts] of Object.entries(D.runs||{{}})){{runs+=`<h2>${{esc(id)}}</h2><div class="grid">`;for(const key of ['option-a','option-b']){{const r=opts[key]||{{}};const m=r.metrics||{{}};const runMetrics=`<div class="metric-grid"><div class="metric"><b>${{m.total_tokens??'—'}}</b>tokens</div><div class="metric"><b>${{m.tool_calls??'—'}}</b>tool calls</div><div class="metric"><b>${{m.tool_errors??'—'}}</b>tool errors</div><div class="metric"><b>${{m.elapsed_seconds??'—'}}</b>seconds</div></div><p class="muted">Tool breakdown: ${{esc(JSON.stringify(m.tool_calls_by_name||{{}}))}}</p>`;runs+=card(key,runMetrics+`<b>Response</b>${{pre(r.response)}}<b>Status</b>${{pre(r.status)}}<b>Patch</b>${{pre(r.patch)}}<b>Metrics and validation</b>${{pre(r.metrics)}}${{r.stderr?'<b>stderr</b>'+pre(r.stderr):''}}`)}}runs+='</div>'}}document.getElementById('runs').innerHTML=runs||card('Not run yet','Approve the proposed eval set before empirical execution.');
 let bundles='<div class="grid">';for(const [name,files] of Object.entries(D.bundles)){{bundles+=`<div><h2>${{esc(name)}}</h2>`+files.map(f=>card(f.path,pre(f.content))).join('')+'</div>'}}document.getElementById('bundles').innerHTML=bundles+'</div>';
 document.getElementById('feedback').innerHTML=card('Human decision',`<label>Preferred option / undecided</label><p><select id="choice"><option>Undecided</option><option>Option A</option><option>Option B</option><option>Hybrid</option></select></p><label>Evidence and notes</label><textarea id="notes"></textarea><p><button id="download">Download feedback.json</button></p>`);document.getElementById('download').onclick=()=>{{const out={{choice:document.getElementById('choice').value,notes:document.getElementById('notes').value,created_at:new Date().toISOString()}};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{{type:'application/json'}}));a.download='feedback.json';a.click();URL.revokeObjectURL(a.href)}};
 </script></body></html>"""

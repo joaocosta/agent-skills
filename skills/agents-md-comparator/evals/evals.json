@@ -13,7 +13,8 @@
         "The static evidence and review page report o200k_base token counts for each root AGENTS.md and its directly referenced local files.",
         "The response presents all proposed empirical evals and explicitly asks for additions, removals, revisions, or approval.",
         "No empirical option/task run artifacts are created before user approval.",
-        "The source repository and both source option directories remain unchanged."
+        "The source repository and both source option directories remain unchanged.",
+        "The generated review is prepared to display per-run and aggregate provider token usage and tool-call counts after approved empirical runs."
       ]
     },
     {
