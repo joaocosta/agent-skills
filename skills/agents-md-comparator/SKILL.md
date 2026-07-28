@@ -1,85 +1,84 @@
 ---
 name: agents-md-comparator
-description: Compare two alternative AGENTS.md instruction bundles against the same repository using static analysis and isolated empirical Pi coding-agent runs, then generate a self-contained evidence viewer for human review. Use when choosing between competing AGENTS.md files or instruction hierarchies. Do not use for comparing ordinary implementation branches or documents unrelated to coding-agent instructions.
+description: Measure how a repository's AGENTS.md guidance changes coding-agent performance by running identical evals with and without all root and nested AGENTS.md files, or compare two alternative instruction bundles. Uses static analysis, isolated empirical Pi runs, and a self-contained evidence viewer. Use whenever evaluating whether AGENTS.md helps, whether instructions are worth keeping, or which of two AGENTS.md approaches performs better. Do not use for ordinary implementation-branch or unrelated document comparisons.
 disable-model-invocation: true
 compatibility: Requires uv, Pi, and git.
 ---
 
 # AGENTS.md Comparator
 
-Compare two instruction bundles as operating guidance for a tool-using coding agent. Produce evidence; do not make the decision for the user unless explicitly asked.
+Compare coding-agent instruction conditions over the same repository. Produce evidence; do not make the decision for the user unless explicitly asked.
 
-Each option is a directory containing a root `AGENTS.md` and any related documentation or artifacts it references. Apply each bundle as an overlay to the same base repository. Never run an option against the user's working tree.
+Prefer the single-repository mode: compare the repository exactly as supplied against an otherwise identical copy with every root and nested `AGENTS.md` removed. Retain all referenced documents and other repository files in both conditions so the experiment isolates the effect of `AGENTS.md`. Label the conditions **With AGENTS.md** and **Without AGENTS.md**.
+
+The legacy two-bundle mode remains available when the user explicitly supplies two standalone instruction-bundle directories. Each bundle must contain a root `AGENTS.md` and may contain related documentation or artifacts it references. Apply each bundle as an overlay to the same base repository.
+
+Never run an empirical task in the user's working tree.
 
 ## Principles
 
-Evaluate whether each bundle helps an LLM coding agent inspect, change, and validate a repository correctly and efficiently. Judge:
+Evaluate whether guidance helps an LLM coding agent inspect, change, and validate a repository correctly and efficiently. Judge:
 
 - correctness and consistency with the repository;
 - empirical task performance and instruction adherence;
 - terseness, directness, and signal-to-noise ratio;
-- whether content belongs in `AGENTS.md` rather than being readily inferable from code or standard tooling;
+- whether content belongs in `AGENTS.md` rather than being readily inferable;
 - unnecessary constraints, repetition, and fluff;
-- stale facts, brittle paths, version-sensitive details, and other maintenance hazards;
-- whether instructions tell agents when and how to update durable guidance as the repository evolves;
+- stale facts, brittle paths, and other maintenance hazards;
+- whether guidance explains when and how to update durable instructions;
 - quality and navigability of referenced, drilled-down documentation.
 
-Treat shorter as better only when it preserves useful guidance. Treat detailed guidance as valuable only when it changes agent behavior or prevents plausible mistakes.
+Treat shorter as better only when it preserves useful guidance. Treat detail as valuable only when it changes behavior or prevents plausible mistakes.
 
 ## Inputs and safety
 
 Require:
 
-- an explicitly supplied base repository path;
-- an explicitly supplied option A directory;
-- an explicitly supplied option B directory; and
+- an explicitly supplied base repository path; and
 - an output workspace path, defaulting to `.agent-artifacts/agents-md-comparison-<timestamp>/`.
 
-If any of the first three paths is missing or ambiguous, ask the user for it and stop. **Do not search the repository for likely candidates, infer options from fixtures or similarly named directories, or choose paths on the user's behalf.** Restate the three resolved paths before invoking the script.
+For the normal with/without comparison, require no option directories. The repository must contain at least one file named exactly `AGENTS.md`, either at its root or nested beneath it. Stop with an error if it contains none.
 
-Resolve paths before running anything. Confirm each option has a root `AGENTS.md`. Refuse an option directory that is the same as, contains, or is contained by the base repository when overlaying it could recurse or mutate source inputs.
+For a two-bundle comparison, additionally require both option directories. If only one is supplied, ask for the other and stop. Do not search for or infer bundle paths. Restate the resolved repository and, when applicable, both bundle paths before invoking the runner.
 
-The runner creates a fresh temporary repository for every option/task pair, overlays the selected bundle, commits that baseline, and runs Pi only there. It must not execute generated tasks in the source repository.
+Resolve paths first and reject unsafe symlinks. In two-bundle mode, confirm both options have a root `AGENTS.md`; reject overlapping option directories or an option that overlaps the repository.
+
+The runner creates a fresh temporary repository for every condition/task pair and commits the experimental baseline before running Pi. In with/without mode, it removes every `AGENTS.md` only from the disposable **Without AGENTS.md** copy. In the with condition, root guidance applies repository-wide and nested guidance only to its directory and descendants; deeper guidance takes precedence within its scope.
 
 ## Runner invocation
 
-The runner is a [PEP 723](https://peps.python.org/pep-0723/) `uv` script. Invoke it with `uv run --script` so `uv` resolves `tiktoken` in its managed cache without modifying the repository or creating a project virtual environment. Do not invoke it with `python` or `python3`, install dependencies manually, or create a venv. If `uv` is unavailable, stop and ask the user to install it rather than changing their environment.
+Invoke the PEP 723 runner with `uv run --script`; do not use `python`, install dependencies manually, or create a venv. If `uv` is unavailable, stop and ask the user to install it.
 
-## Phase 1: prepare evidence and proposed evals
+### Phase 1: prepare evidence and proposed evals
 
-Run:
+For the preferred single-repository comparison:
 
 ```bash
 uv run --quiet --script skills/agents-md-comparator/scripts/compare_agents.py prepare \
-  --repo <base-repository> \
-  --option-a <option-a-directory> \
-  --option-b <option-b-directory> \
+  --repo <repository> \
   --workspace <output-directory> \
   [--provider <provider>] [--model <model>] [--thinking <level>] \
   [--eval-count <count>] [--timeout <seconds>]
 ```
 
-The script snapshots both bundles, records deterministic size/reference/staleness indicators, asks a neutral Pi evaluator for a qualitative static review, asks Pi for repository-specific empirical tasks, and writes:
+For two explicit bundles, add both arguments:
 
-- `manifest.json` — paths, hashes, Pi configuration, and timestamps;
+```bash
+  --option-a <option-a-directory> --option-b <option-b-directory>
+```
+
+The script snapshots the instruction conditions, records deterministic size/reference/staleness indicators, requests a neutral static review and repository-specific empirical tasks, and writes:
+
+- `manifest.json` — mode, labels, paths, hashes, Pi configuration, and timestamps;
 - `static-analysis.json` — deterministic and qualitative static evidence;
 - `evals.json` — proposed empirical tasks;
-- `review.html` — a self-contained preview.
+- `review.html` — self-contained preview.
 
-Read `evals.json` completely. Present every proposed task to the user with its purpose, expected evidence, and validation. Explicitly ask whether they want to add, remove, or revise any task. Do not start empirical runs until the user approves the exact set. If the user requests changes, edit `evals.json`, show the revised set, and request approval again.
+Read `evals.json` completely. Present every task with its purpose, expected evidence, and validation. Ask whether the user wants to add, remove, revise, or approve tasks. Do not begin empirical runs until the exact set is explicitly approved. If edited, present the revised complete set and request approval again.
 
-A useful eval set is small and discriminating. It should normally cover:
+Use a small, discriminating eval set. It should normally cover representative implementation and discovery, genuinely non-obvious guidance, resistance to stale or inferable instructions, and instruction maintenance when a task materially changes durable guidance. Do not reward unique wording artificially. Tasks must work in isolated copies, avoid external side effects and network assumptions, and have observable completion criteria.
 
-1. a representative code change requiring repository discovery and validation;
-2. correct use of genuinely non-obvious project guidance or drilled-down docs;
-3. resistance to stale, redundant, or inferable instructions;
-4. maintenance of `AGENTS.md` or related guidance when a task makes it materially outdated.
-
-Do not create artificial tasks whose only purpose is to reward wording unique to one option. Tasks must be feasible in isolated copies, avoid external side effects, and have observable completion criteria. Do not include secret-dependent, destructive, deployment, or network-dependent tasks.
-
-## Phase 2: run approved evals
-
-After explicit approval, run:
+### Phase 2: run approved evals
 
 ```bash
 uv run --quiet --script skills/agents-md-comparator/scripts/compare_agents.py run \
@@ -89,45 +88,25 @@ uv run --quiet --script skills/agents-md-comparator/scripts/compare_agents.py ru
   [--timeout <seconds>] [--concurrency <count>]
 ```
 
-Use one run per option per task. Keep provider, model, thinking level, tools, timeout, and prompt identical across options. The script runs Pi in JSON mode with ephemeral sessions, disables unrelated skills/extensions/templates/themes and ambient context files, explicitly appends only the staged root `AGENTS.md`, and enables the standard coding tools `read,bash,edit,write`.
+Use one run per condition per task. Keep model configuration, tools, timeout, and prompt identical. Pi uses ephemeral JSON sessions, disables unrelated resources and ambient context discovery, receives only the staged condition's explicitly scoped `AGENTS.md` guidance, and has `read,bash,edit,write` tools.
 
-The runner stores, for each task and option:
-
-- Pi's event stream and final response;
-- elapsed time;
-- provider-reported token usage summed across every model response in the run;
-- total tool calls, per-tool call counts, and tool errors;
-- repository status and patch;
-- validation command outputs;
-- execution errors and timeouts.
-
-It also writes `empirical-summary.json` with per-option token, tool-call, error, and elapsed-time aggregates. Missing provider usage remains visibly missing rather than being treated as zero.
-
-It then performs a blind Pi comparison with randomized A/B labels. The grader may use token usage, tool calls, and elapsed time as efficiency evidence, but only after considering correctness, validation, and task completeness. Blind judgments are supporting evidence, not the user's decision. Preserve ties and evaluator uncertainty rather than forcing a winner.
+The runner captures event streams, responses, elapsed time, summed provider usage, tool calls and errors, repository status and patch, validations, execution failures, and timeouts. It writes aggregate efficiency evidence and performs a randomized blind comparison. Efficiency supports correctness and completeness; it does not determine the winner. Preserve ties and uncertainty.
 
 ## Review the result
 
-The completed `review.html` must expose:
+The completed `review.html` exposes snapshotted conditions, static evidence, approved tasks, side-by-side outputs and patches, validation, usage and tool metrics, aggregates, and blind grades. It must use **With AGENTS.md** and **Without AGENTS.md** labels in single-repository mode and avoid an automatic recommendation.
 
-- both snapshotted instruction bundles;
-- static findings with file-level evidence;
-- all approved task prompts and validation rules;
-- side-by-side responses, patches, validation results, timing, summed token usage, and tool-call counts by tool;
-- cross-eval efficiency aggregates for each option, with usage-coverage counts;
-- blind-grader findings with the hidden labels revealed only in the report;
-- aggregate factual summaries without an automatic final recommendation.
-
-Open or report the exact path to `review.html`. Summarize material evidence and limitations, including the fact that one run per task does not measure run-to-run variance. Ask the user which option they prefer or what follow-up evidence they need. Recommend a winner or hybrid only if the user asks; if proposing a hybrid, identify exact parts to retain and maintenance costs introduced.
+Report the exact `review.html` path. Summarize material evidence and limitations, including that one run per task does not measure variance. Ask what the user prefers or what follow-up evidence they need. Recommend a winner or hybrid only when asked.
 
 ## Interpretation guardrails
 
 - Separate deterministic facts, evaluator judgments, and user judgments.
-- Do not reward an option merely for mentioning more topics.
-- Do not penalize omitted facts that a competent agent can cheaply and reliably infer.
+- Do not reward guidance merely for mentioning more topics.
+- Do not penalize omitted facts a capable agent can cheaply infer.
 - Penalize wrong instructions more heavily than missing convenience guidance.
-- Treat token usage and tool-call count as efficiency context, not standalone quality scores. Prefer fewer only when compared results are similarly correct and complete; extra work may be justified by materially better evidence or outcomes.
-- Distinguish static bundle counts from empirical usage: static counts use tiktoken's `o200k_base` encoding as a rough size estimate, while run usage is provider-reported and summed across model responses.
-- Treat missing token usage as unavailable, never as zero.
-- Attribute performance differences cautiously when patches are both correct.
-- Report contamination, failed validation, malformed evaluator output, timeout, or missing evidence prominently.
+- Treat token and tool-call counts as context only after comparing correctness.
+- Static token estimates use `o200k_base`; empirical usage is provider-reported.
+- Treat missing usage as unavailable, never zero.
+- Attribute differences cautiously when both patches are correct.
+- Report contamination, failed validation, malformed output, timeout, or missing evidence prominently.
 - Never silently regenerate approved evals during `run`.

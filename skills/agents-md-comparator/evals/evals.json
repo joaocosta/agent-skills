@@ -3,29 +3,68 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Compare `evals/files/basic/option-a` and `evals/files/basic/option-b` as AGENTS.md bundles for `evals/files/basic/repo`. Put artifacts in `.agent-artifacts/basic-agents-comparison`. I want static and empirical evidence, but do not spend money on empirical runs until I approve the proposed evals.",
-      "expected_output": "The skill runs only the prepare phase, reports the generated static evidence and review page, presents every proposed empirical eval with purpose and validation, and waits for explicit approval without running either option on an empirical task.",
-      "files": ["evals/files/basic"],
+      "prompt": "Evaluate whether the AGENTS.md guidance in `evals/files/basic/repo` actually helps coding-agent performance. Put artifacts in `.agent-artifacts/basic-with-without-comparison`. I want static and empirical evidence, but do not spend money on empirical runs until I approve the proposed evals.",
+      "expected_output": "The skill selects single-repository mode, runs only prepare, labels the conditions With AGENTS.md and Without AGENTS.md, presents all proposed tasks, and waits for explicit approval.",
+      "files": ["evals/files/basic/repo"],
       "expectations": [
-        "The response identifies the base repository and both instruction bundle paths and uses an isolated comparison workspace.",
-        "The runner is invoked with `uv run --script`, not `python` or `python3`; no dependency installation or project virtual environment is attempted.",
+        "The response resolves only the repository and workspace paths; it does not request option directories for the with/without comparison.",
+        "The runner is invoked with `uv run --script` and `--repo`, without `--option-a` or `--option-b`; no dependency installation or virtual environment is attempted.",
         "prepare creates manifest.json, static-analysis.json, evals.json, and review.html.",
-        "The static evidence and review page report o200k_base token counts for each root AGENTS.md and its directly referenced local files.",
-        "The response presents all proposed empirical evals and explicitly asks for additions, removals, revisions, or approval.",
-        "No empirical option/task run artifacts are created before user approval.",
-        "The source repository and both source option directories remain unchanged.",
-        "The generated review is prepared to display per-run and aggregate provider token usage and tool-call counts after approved empirical runs."
+        "The manifest records repository-guidance mode and the labels With AGENTS.md and Without AGENTS.md.",
+        "The With AGENTS.md snapshot includes both the root AGENTS.md and tests/AGENTS.md, while the Without AGENTS.md snapshot contains no AGENTS.md files.",
+        "Referenced docs such as docs/maintenance.md remain represented as guidance evidence rather than being classified as AGENTS.md files.",
+        "Static evidence reports aggregate o200k_base token counts and file counts for root and nested AGENTS.md guidance, and zero AGENTS.md files for the without condition.",
+        "The response presents every proposed empirical eval and asks for additions, removals, revisions, or approval.",
+        "No empirical task runs are created before approval, and the source repository remains unchanged.",
+        "The review uses With AGENTS.md and Without AGENTS.md rather than Option A and Option B for visible condition labels."
       ]
     },
     {
       "id": 2,
-      "prompt": "I have two competing AGENTS.md approaches somewhere in this repository. Compare them and tell me which one is better.",
-      "expected_output": "The skill requests the missing base-repository and two option-directory paths instead of guessing, running broad searches, or declaring a winner without evidence.",
+      "prompt": "Compare `evals/files/basic/option-a` and `evals/files/basic/option-b` as alternative AGENTS.md bundles for `evals/files/basic/repo`. Put artifacts in `.agent-artifacts/basic-two-bundle-comparison`. Stop after showing me the proposed evals.",
+      "expected_output": "The skill retains backward-compatible two-bundle mode, prepares static evidence and proposed tasks, and does not start empirical runs.",
+      "files": ["evals/files/basic"],
+      "expectations": [
+        "The response identifies the repository and both explicitly supplied bundle paths.",
+        "The runner receives both --option-a and --option-b in addition to --repo.",
+        "Both standalone bundles are validated as containing a root AGENTS.md and are snapshotted without mutating source inputs.",
+        "The report uses Option A and Option B labels in two-bundle mode.",
+        "No empirical option/task artifacts are created before user approval."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Evaluate the AGENTS.md impact in `evals/files/nested-only-repo`. It has no root guidance file, but it may have scoped guidance deeper in the tree. Put preparation artifacts in `.agent-artifacts/nested-only-comparison` and stop before empirical runs.",
+      "expected_output": "The skill accepts a repository containing only nested AGENTS.md guidance and prepares a with/without comparison without demanding a root file.",
+      "files": ["evals/files/nested-only-repo"],
+      "expectations": [
+        "Preparation succeeds because at least one nested AGENTS.md exists even though the repository root has none.",
+        "The With AGENTS.md snapshot preserves src/AGENTS.md at its relative path.",
+        "The Without AGENTS.md snapshot contains no AGENTS.md files.",
+        "The report labels the conditions With AGENTS.md and Without AGENTS.md and waits for eval approval."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Evaluate the AGENTS.md impact in `evals/files/no-agents-repo`. Put artifacts in `.agent-artifacts/no-agents-comparison`.",
+      "expected_output": "The skill stops with a clear error because the supplied repository contains neither root nor nested AGENTS.md guidance.",
+      "files": ["evals/files/no-agents-repo"],
+      "expectations": [
+        "The response reports that the repository has no root or nested AGENTS.md.",
+        "No static evaluator, eval generator, or empirical Pi run is started.",
+        "The skill does not ask for two option directories as a workaround."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "I want to find out whether this project's AGENTS.md is helping or just wasting context, but I haven't told you which project directory to use.",
+      "expected_output": "The skill requests the missing repository path instead of searching or requiring two option directories.",
       "files": [],
       "expectations": [
-        "The response asks for the base repository path, option A directory, and option B directory.",
-        "The response does not run prepare or empirical evaluations without resolved inputs.",
-        "The response frames the result as evidence for the user rather than promising an automatic winner."
+        "The response asks for one explicit repository path.",
+        "The response does not ask for option A and option B directories unless the user says they want to compare two standalone bundles.",
+        "The response does not search for a likely repository or run preparation without a resolved input.",
+        "The response frames the eventual output as evidence rather than promising an automatic winner."
       ]
     }
   ]
