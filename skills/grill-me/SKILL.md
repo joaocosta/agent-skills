@@ -34,7 +34,7 @@ Maintain a compact design record in the conversation from the start. Record conc
 
 Use a stable lowercase kebab-case initiative slug. Once clear, identify `.agent-artifacts/<initiative-slug>/design.md`; reuse the slug throughout and state it at major checkpoints. Inspect an existing initiative directory before writing and ask before replacing an existing design unless the user explicitly requested its update.
 
-After each answer, show changed conclusions briefly. Reprint the full compact record only at major checkpoints, on request, or at completion.
+After each answer, show a brief plain-language summary under **What I recorded from your answer** so the user can verify how their answer changed the design. Include only new, changed, or removed conclusions; omit internal bookkeeping and unchanged context. Reprint the full compact record only at major checkpoints, on request, or at completion.
 
 The record must stand alone for agents in clean contexts. Capture, when material:
 
@@ -67,17 +67,20 @@ After each user answer:
 4. Resolve foundational and hard-to-reverse decisions before local or reversible ones.
 5. Ask one concrete, non-compound question.
 
-Use this turn structure:
+Optimize each turn for the human making the decision: first confirm what was understood from their preceding answer, then present the next actionable question and its supporting context. Use this order:
 
-- **Why it matters:** Explain the consequence of leaving the decision unresolved. Cite evidence or prior decisions when relevant.
-- **Recommendation:** Recommend an answer when evidence, principles, risk, or reversibility support one; state assumptions and tradeoffs. Otherwise offer two to four viable options and the selection criterion.
-- **Question:** Ask exactly one question that advances the design.
+1. **What I recorded from your answer:** Briefly summarize only conclusions added, changed, or removed because of the user's preceding answer. Use direct domain language rather than unexplained record taxonomy. Keep this confirmation compact—usually one to three bullets—so it does not bury the next question. Omit it on the first turn, when there is no preceding answer.
+2. **Question:** Ask exactly one concrete question that advances the design.
+3. **Why I'm asking:** Explain the consequence of leaving the decision unresolved. Cite evidence or prior decisions when relevant.
+4. **Recommendation:** Recommend an answer when evidence, principles, risk, or reversibility support one; state assumptions and tradeoffs. Otherwise offer two to four viable options and the selection criterion.
+
+If useful, end with the anticipated next topic on a separate **Coming next:** line rather than presenting it as a record change. Keep the question easy to find even when the rationale is substantial. The recommendation supports the question; it must not obscure or restate it.
 
 Challenge vague success criteria, unsupported assumptions, accidental scope, and solutions without a clear problem. If an answer conflicts with evidence, goals, or prior decisions, explain the conflict and ask which premise should change. Never silently reinterpret an answer.
 
 If the user cannot decide, identify the decision owner or source of truth. Propose the cheapest useful evidence, experiment, or reversible default and explain what uncertainty it addresses before requesting approval for environment-changing work. Record the result with the correct status.
 
-After each major branch, show a compact checkpoint of settled decisions, changed assumptions, accepted risks, blockers, and remaining high-impact questions. Let the user correct drift, then continue with one question. If no material question remains, proceed to completion.
+After each major branch, show a compact **Design checkpoint**, introduced as a chance for the user to correct the evolving design. Summarize settled decisions, changed assumptions, accepted risks, blockers, and remaining high-impact questions in plain language. Let the user correct drift, then continue with one question. If no material question remains, proceed to completion.
 
 ## Converge and persist
 
