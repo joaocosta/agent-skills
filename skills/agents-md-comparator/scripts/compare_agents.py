@@ -1,7 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["tiktoken>=0.7.0"]
+# ///
 """Compare two AGENTS.md bundles with static review and isolated Pi runs.
 
-Standard-library only. Run ``prepare --help`` or ``run --help`` for usage.
+Run ``prepare --help`` or ``run --help`` for usage.
 """
 
 from __future__ import annotations
@@ -23,6 +27,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+import tiktoken
+
 TEXT_SUFFIXES = {
     "", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg",
     ".py", ".js", ".jsx", ".ts", ".tsx", ".sh", ".go", ".rs", ".java",
@@ -30,6 +36,7 @@ TEXT_SUFFIXES = {
 }
 EXCLUDED_DIRS = {".git", ".agent-artifacts", "node_modules", "__pycache__"}
 THINKING_LEVELS = ("off", "minimal", "low", "medium", "high", "xhigh", "max")
+TOKEN_ENCODING = tiktoken.get_encoding("o200k_base")
 
 
 def now_iso() -> str:
@@ -112,14 +119,20 @@ def read_text(path: Path, limit: int = 500_000) -> str | None:
         return None
 
 
+def token_count(text: str) -> int:
+    return len(TOKEN_ENCODING.encode(text, disallowed_special=()))
+
+
 def bundle_metrics(root: Path) -> dict[str, Any]:
     files: list[dict[str, Any]] = []
-    total_bytes = total_words = total_lines = 0
+    total_bytes = total_tokens = total_lines = 0
+    token_counts_by_path: dict[str, int] = {}
     for path in iter_files(root):
         raw = path.read_bytes()
         text = read_text(path)
+        relative_path = path.relative_to(root).as_posix()
         entry: dict[str, Any] = {
-            "path": path.relative_to(root).as_posix(),
+            "path": relative_path,
             "bytes": len(raw),
             "sha256": hashlib.sha256(raw).hexdigest(),
             "text": text is not None,
@@ -127,19 +140,28 @@ def bundle_metrics(root: Path) -> dict[str, Any]:
         total_bytes += len(raw)
         if text is not None:
             entry["lines"] = len(text.splitlines())
-            entry["words"] = len(re.findall(r"\b\w+\b", text))
+            entry["tokens"] = token_count(text)
+            token_counts_by_path[relative_path] = entry["tokens"]
             total_lines += entry["lines"]
-            total_words += entry["words"]
+            total_tokens += entry["tokens"]
         files.append(entry)
 
     agents = (root / "AGENTS.md").read_text(errors="replace")
     links = []
+    referenced_paths: set[str] = set()
     for match in re.finditer(r"\[[^\]]*\]\(([^)#]+)(?:#[^)]+)?\)", agents):
         target = match.group(1).strip()
         if re.match(r"^[a-z]+://", target, re.I):
             links.append({"target": target, "kind": "external", "exists": None})
         else:
-            links.append({"target": target, "kind": "local", "exists": (root / target).exists()})
+            target_path = (root / target).resolve()
+            relative_target = target_path.relative_to(root).as_posix() if target_path.is_relative_to(root) else None
+            exists = target_path.is_file() and relative_target is not None
+            link = {"target": target, "kind": "local", "exists": exists}
+            if exists and relative_target in token_counts_by_path:
+                link["tokens"] = token_counts_by_path[relative_target]
+                referenced_paths.add(relative_target)
+            links.append(link)
 
     indicators: list[dict[str, Any]] = []
     patterns = {
@@ -156,7 +178,8 @@ def bundle_metrics(root: Path) -> dict[str, Any]:
     return {
         "summary": {
             "files": len(files), "bytes": total_bytes, "lines": total_lines,
-            "words": total_words, "agents_md_words": len(re.findall(r"\b\w+\b", agents)),
+            "tokens": total_tokens, "agents_md_tokens": token_count(agents),
+            "referenced_tokens": sum(token_counts_by_path[path] for path in referenced_paths),
         },
         "files": files,
         "markdown_links_from_agents": links,
@@ -619,7 +642,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{{document.quer
 document.getElementById('overview').innerHTML=card('Manifest',pre(D.manifest))+`<p class="muted">This report presents evidence rather than an automatic recommendation. One run per task does not measure model variance.</p>`;
 const findingText=x=>typeof x==='string'?x:(x?.claim||x?.text||JSON.stringify(x));
 const findings=xs=>!xs?.length?'<p class="muted">None reported.</p>':xs.map(x=>{{const sev=typeof x==='object'?(x.severity||'') : '';const ev=typeof x==='object'?x.evidence:'';return `<div class="finding ${{esc(sev)}}">${{sev?`<span class="badge">${{esc(sev)}}</span>`:''}}<div>${{esc(findingText(x))}}</div>${{ev?`<div class="evidence"><b>Evidence:</b> ${{esc(ev)}}</div>`:''}}</div>`}}).join('');
-const bundleStatic=(key,label)=>{{const d=D.static?.deterministic?.[key]||{{}};const q=D.static?.qualitative?.[key]||{{}};const s=d.summary||{{}};const metrics=`<div class="metric-grid"><div class="metric"><b>${{s.agents_md_words??'—'}}</b>AGENTS.md words</div><div class="metric"><b>${{s.files??'—'}}</b>bundle files</div><div class="metric"><b>${{s.lines??'—'}}</b>total lines</div><div class="metric"><b>${{s.bytes??'—'}}</b>bytes</div></div>`;const links=(d.markdown_links_from_agents||[]).map(x=>`<div>${{x.exists===false?'⚠️':x.exists===true?'✓':'↗'}} <code>${{esc(x.target)}}</code> <span class="muted">(${{esc(x.kind)}})</span></div>`).join('')||'<p class="muted">No Markdown links found in root AGENTS.md.</p>';return card(label,metrics+`<div class="subsection"><h3>Strengths</h3>${{findings(q.strengths)}}</div><div class="subsection"><h3>Weaknesses</h3>${{findings(q.weaknesses)}}</div><div class="subsection"><h3>Staleness risks</h3>${{findings(q.staleness_risks)}}</div><div class="subsection"><h3>Self-maintenance</h3>${{findings(q.self_maintenance)}}</div><div class="subsection"><h3>Referenced documentation</h3>${{links}}</div><div class="subsection"><h3>Mechanical staleness indicators</h3>${{findings((d.possible_staleness_indicators||[]).map(x=>({{claim:`${{x.kind}} at line ${{x.line}}: ${{x.text}}`,severity:'review'}})))}}</div>`);}};
+const bundleStatic=(key,label)=>{{const d=D.static?.deterministic?.[key]||{{}};const q=D.static?.qualitative?.[key]||{{}};const s=d.summary||{{}};const metrics=`<div class="metric-grid"><div class="metric"><b>${{s.agents_md_tokens??'—'}}</b>AGENTS.md tokens</div><div class="metric"><b>${{s.referenced_tokens??'—'}}</b>referenced-file tokens</div><div class="metric"><b>${{s.tokens??'—'}}</b>bundle tokens</div><div class="metric"><b>${{s.files??'—'}}</b>bundle files</div></div>`;const links=(d.markdown_links_from_agents||[]).map(x=>`<div>${{x.exists===false?'⚠️':x.exists===true?'✓':'↗'}} <code>${{esc(x.target)}}</code> <span class="muted">(${{esc(x.kind)}}${{Number.isInteger(x.tokens)?`, ${{x.tokens}} tokens`:''}})</span></div>`).join('')||'<p class="muted">No Markdown links found in root AGENTS.md.</p>';return card(label,metrics+`<div class="subsection"><h3>Strengths</h3>${{findings(q.strengths)}}</div><div class="subsection"><h3>Weaknesses</h3>${{findings(q.weaknesses)}}</div><div class="subsection"><h3>Staleness risks</h3>${{findings(q.staleness_risks)}}</div><div class="subsection"><h3>Self-maintenance</h3>${{findings(q.self_maintenance)}}</div><div class="subsection"><h3>Referenced documentation</h3>${{links}}</div><div class="subsection"><h3>Mechanical staleness indicators</h3>${{findings((d.possible_staleness_indicators||[]).map(x=>({{claim:`${{x.kind}} at line ${{x.line}}: ${{x.text}}`,severity:'review'}})))}}</div>`);}};
 const q=D.static?.qualitative||{{}};let staticHtml=`<div class="grid">${{bundleStatic('option_a','Option A')}}${{bundleStatic('option_b','Option B')}}</div>`;staticHtml+=card('Cross-option findings',findings(q.cross_option_findings));staticHtml+=`<div class="grid">${{card('Repository mismatches',findings(q.repository_mismatches))}}${{card('Uncertainties',findings(q.uncertainties))}}</div>`;if(D.static?.qualitative_error)staticHtml+=card('Static evaluator error',`<p class="bad">${{esc(D.static.qualitative_error)}}</p>`);if(D.grades?.grades?.length)staticHtml+=card('Blind empirical grades',D.grades.grades.map(g=>`<div class="finding"><b>Eval ${{esc(g.task_id)}}:</b> ${{esc(g.winner_option||'undetermined')}}<div>${{esc(g.reasoning||g.error||'')}}</div></div>`).join(''));document.getElementById('static').innerHTML=staticHtml;
 document.getElementById('evals').innerHTML=(D.evals?.evals||[]).map(e=>card(`Eval ${{e.id}} — ${{e.name}}`,`<b>Prompt</b>${{pre(e.prompt)}}<b>Purpose</b><p>${{esc(e.purpose)}}</p><b>Expected evidence</b>${{pre(e.expected_evidence)}}<b>Validation</b>${{pre(e.validation_commands)}}<p class="muted">${{esc(e.review_notes)}}</p>`)).join('')||card('No evals','No evals generated.');
 let runs='';for(const [id,opts] of Object.entries(D.runs||{{}})){{runs+=`<h2>${{esc(id)}}</h2><div class="grid">`;for(const key of ['option-a','option-b']){{const r=opts[key]||{{}};runs+=card(key,`<b>Response</b>${{pre(r.response)}}<b>Status</b>${{pre(r.status)}}<b>Patch</b>${{pre(r.patch)}}<b>Metrics and validation</b>${{pre(r.metrics)}}${{r.stderr?'<b>stderr</b>'+pre(r.stderr):''}}`)}}runs+='</div>'}}document.getElementById('runs').innerHTML=runs||card('Not run yet','Approve the proposed eval set before empirical execution.');

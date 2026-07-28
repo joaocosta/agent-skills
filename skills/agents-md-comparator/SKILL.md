@@ -44,7 +44,7 @@ The runner creates a fresh temporary repository for every option/task pair, over
 Run:
 
 ```bash
-python3 skills/agents-md-comparator/scripts/compare_agents.py prepare \
+skills/agents-md-comparator/scripts/compare_agents.py prepare \
   --repo <base-repository> \
   --option-a <option-a-directory> \
   --option-b <option-b-directory> \
@@ -76,7 +76,7 @@ Do not create artificial tasks whose only purpose is to reward wording unique to
 After explicit approval, run:
 
 ```bash
-python3 skills/agents-md-comparator/scripts/compare_agents.py run \
+skills/agents-md-comparator/scripts/compare_agents.py run \
   --workspace <output-directory> \
   --approved \
   [--provider <provider>] [--model <model>] [--thinking <level>] \
@@ -114,7 +114,7 @@ Open or report the exact path to `review.html`. Summarize material evidence and 
 - Do not reward an option merely for mentioning more topics.
 - Do not penalize omitted facts that a competent agent can cheaply and reliably infer.
 - Penalize wrong instructions more heavily than missing convenience guidance.
-- Treat token/word count as context, not a quality score.
+- Treat token count as context, not a quality score. Counts use tiktoken's `o200k_base` encoding as a rough usage estimate.
 - Attribute performance differences cautiously when patches are both correct.
 - Report contamination, failed validation, malformed evaluator output, timeout, or missing evidence prominently.
 - Never silently regenerate approved evals during `run`.

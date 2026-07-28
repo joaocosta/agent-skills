@@ -9,6 +9,7 @@
       "expectations": [
         "The response identifies the base repository and both instruction bundle paths and uses an isolated comparison workspace.",
         "prepare creates manifest.json, static-analysis.json, evals.json, and review.html.",
+        "The static evidence and review page report o200k_base token counts for each root AGENTS.md and its directly referenced local files.",
         "The response presents all proposed empirical evals and explicitly asks for additions, removals, revisions, or approval.",
         "No empirical option/task run artifacts are created before user approval.",
         "The source repository and both source option directories remain unchanged."
