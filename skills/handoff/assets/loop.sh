@@ -11,40 +11,51 @@ TASKS_DIR="$SCRIPT_DIR/tasks"
 LOG_DIR="$SCRIPT_DIR/logs"
 INITIATIVE_NAME="$(basename "$SCRIPT_DIR")"
 RALPH_SESSION_PREFIX="${RALPH_SESSION_PREFIX:-ralph:${INITIATIVE_NAME}}"
+BLOCKED_EXIT_CODE=3
+NO_PROGRESS_EXIT_CODE=4
 
 if [[ ! "$MAX_ITERATIONS" =~ ^[1-9][0-9]*$ ]]; then
   printf 'MAX_ITERATIONS must be a positive integer, got: %s\n' "$MAX_ITERATIONS" >&2
   exit 2
 fi
 
-if [[ ! -f "$README_PATH" ]]; then
-  printf 'Missing Ralph prompt: %s\n' "$README_PATH" >&2
-  exit 2
-fi
+for required_path in "$README_PATH" "$PROGRESS_PATH"; do
+  if [[ ! -f "$required_path" ]]; then
+    printf 'Missing Ralph file: %s\n' "$required_path" >&2
+    exit 2
+  fi
+done
 
-if [[ ! -f "$PROGRESS_PATH" ]]; then
-  printf 'Missing Ralph progress: %s\n' "$PROGRESS_PATH" >&2
-  exit 2
-fi
+select_next_task() {
+  local next_line
+  local status_line
 
-next_task_name() {
-  local next_task_line
-  local task_name
-
-  next_task_line="$(grep -m1 -E '^\*\*Next task:\*\*' "$PROGRESS_PATH" || true)"
-  if [[ "$next_task_line" =~ (task-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*) ]]; then
+  next_line="$(grep -m1 -E '^\*\*Next task:\*\*' "$PROGRESS_PATH" || true)"
+  if [[ "$next_line" =~ (task-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*) ]]; then
     task_name="${BASH_REMATCH[1]}"
-  else
-    printf 'Cannot determine the next task from %s\n' "$PROGRESS_PATH" >&2
+    if [[ ! -f "$TASKS_DIR/$task_name.md" ]]; then
+      printf 'Next task file does not exist: %s\n' "$TASKS_DIR/$task_name.md" >&2
+      return 2
+    fi
+    return 0
+  fi
+
+  if [[ "$next_line" =~ ^\*\*Next\ task:\*\*[[:space:]]*\`?[Nn][Oo][Nn][Ee]\`?[[:space:]]*$ ]]; then
+    status_line="$(grep -m1 -E '^\*\*Initiative status:\*\*' "$PROGRESS_PATH" || true)"
+    if [[ "$status_line" == *blocked* ]]; then
+      printf 'Ralph work is blocked with no runnable task; see %s\n' "$PROGRESS_PATH" >&2
+      return "$BLOCKED_EXIT_CODE"
+    fi
+    if [[ "$status_line" == *complete* ]]; then
+      printf 'Progress is complete but completion marker is missing: %s\n' "$COMPLETION_MARKER" >&2
+      return 2
+    fi
+    printf 'No runnable task is recorded; see %s\n' "$PROGRESS_PATH" >&2
     return 2
   fi
 
-  if [[ ! -f "$TASKS_DIR/$task_name.md" ]]; then
-    printf 'Next task file does not exist: %s\n' "$TASKS_DIR/$task_name.md" >&2
-    return 2
-  fi
-
-  printf '%s\n' "$task_name"
+  printf 'Cannot determine Next task from %s\n' "$PROGRESS_PATH" >&2
+  return 2
 }
 
 # RALPH_CMD is intentionally split into a command and simple arguments.
@@ -62,12 +73,12 @@ if [[ -f "$COMPLETION_MARKER" ]]; then
   exit 0
 fi
 
+select_next_task || exit $?
 for ((iteration = 1; iteration <= MAX_ITERATIONS; iteration++)); do
-  printf '==> Ralph iteration %d/%d\n' "$iteration" "$MAX_ITERATIONS"
-  iteration_id="$(printf '%03d' "$iteration")"
-  task_name="$(next_task_name)"
-  log_path="$LOG_DIR/iteration-${iteration_id}.log"
+  printf '==> Ralph iteration %d/%d: %s\n' "$iteration" "$MAX_ITERATIONS" "$task_name"
+  log_path="$LOG_DIR/iteration-$(printf '%03d' "$iteration").log"
   session_name="${RALPH_SESSION_PREFIX}:${task_name}"
+  before_progress="$(cksum < "$PROGRESS_PATH")"
 
   set +e
   "${ralph_command[@]}" -n "$session_name" "$(cat "$README_PATH")" 2>&1 | tee "$log_path"
@@ -84,6 +95,14 @@ for ((iteration = 1; iteration <= MAX_ITERATIONS; iteration++)); do
     exit 0
   fi
 
+  if [[ "$before_progress" == "$(cksum < "$PROGRESS_PATH")" ]]; then
+    printf 'No progress.md update after %s; refusing to repeat it. See %s\n' \
+      "$task_name" "$log_path" >&2
+    exit "$NO_PROGRESS_EXIT_CODE"
+  fi
+
+  # Detect a newly blocked or invalid state now, including on the last iteration.
+  select_next_task || exit $?
 done
 
 printf 'Reached MAX_ITERATIONS=%s without %s\n' "$MAX_ITERATIONS" "$COMPLETION_MARKER" >&2

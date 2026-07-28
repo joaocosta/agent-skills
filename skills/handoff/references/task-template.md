@@ -1,5 +1,7 @@
 # Task {{NN}} — {{Outcome}}
 
+If blocked, preserve a coherent repository state and record concrete evidence in `progress.md`. Route `Next task` to another pending task only when its prerequisites are complete; otherwise use `none` and mark the initiative `blocked`. Do not retry a blocked task without new evidence or a recorded resolution.
+
 ## Outcome and current state
 
 {{One concrete outcome and verified starting state.}}

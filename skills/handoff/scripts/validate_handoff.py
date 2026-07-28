@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HANDOFF_HEADINGS = [
@@ -63,7 +66,7 @@ def read_text(path: Path, result: Validation) -> str:
     except (OSError, UnicodeError) as exc:
         result.error(f"cannot read {path}: {exc}")
         return ""
-    if "{{" in text or "}}" in text:
+    if re.search(r"\{\{[^{}\n]+\}\}", text):
         result.error(f"{path}: unresolved template placeholder")
     return text
 
@@ -101,10 +104,61 @@ def validate_readme_controls(path: Path, text: str, result: Validation) -> None:
         "Conventional Commits instruction": r"Conventional Commits",
         "end-of-task report instruction": r"concise report",
         "generic completion marker": r"ralph-complete",
+        "next-runnable-task routing": r"next runnable",
+        "blocked no-runnable stop": r"Next task`?\s+(?:to\s+)?`?none`?.{0,160}blocked|blocked.{0,160}Next task`?\s+(?:to\s+)?`?none",
+        "blocked-task retry prohibition": r"Never route back to a blocked task",
     }
     for label, pattern in controls.items():
         if not re.search(pattern, text, re.IGNORECASE):
             result.error(f"{path}: missing {label}")
+
+
+def validate_loop_behavior(loop_path: Path, result: Validation) -> None:
+    scenarios = [
+        ("blocked", "blocked", "none", 3, "blocked with no runnable task", False),
+        ("deadlock", "in progress", "none", 2, "No runnable task", False),
+        ("no-progress", "in progress", "`task-01-one`", 4, "No progress.md update", False),
+        ("route-around", "in progress", "`task-02-two`", 0, "task-02-two", True),
+    ]
+    with tempfile.TemporaryDirectory(prefix="handoff-loop-") as temp:
+        temp_root = Path(temp)
+        for name, status, next_task, expected_code, expected_text, completes in scenarios:
+            case = temp_root / name
+            tasks = case / "tasks"
+            tasks.mkdir(parents=True)
+            candidate = case / "loop.sh"
+            shutil.copy2(loop_path, candidate)
+            candidate.chmod(candidate.stat().st_mode | 0o111)
+            (case / "README.md").write_text("# Ralph test prompt\n", encoding="utf-8")
+            (case / "progress.md").write_text(
+                "# Test progress\n\n"
+                f"**Initiative status:** {status}\n"
+                "**Current task:** none\n"
+                f"**Next task:** {next_task}\n",
+                encoding="utf-8",
+            )
+            for task_name in ("task-01-one", "task-02-two"):
+                (tasks / f"{task_name}.md").write_text("# Test task\n", encoding="utf-8")
+            agent = case / "fake-agent"
+            completion_command = 'touch "$(dirname -- "$0")/ralph-complete"' if completes else ":"
+            agent.write_text(f"#!/usr/bin/env bash\n{completion_command}\n", encoding="utf-8")
+            agent.chmod(0o755)
+            environment = os.environ.copy()
+            environment.update({"RALPH_CMD": str(agent), "MAX_ITERATIONS": "2"})
+            run = subprocess.run(
+                [str(candidate)],
+                capture_output=True,
+                text=True,
+                env=environment,
+                check=False,
+                timeout=10,
+            )
+            output = run.stdout + run.stderr
+            if run.returncode != expected_code or expected_text not in output:
+                result.error(
+                    f"{loop_path}: {name} behavior failed "
+                    f"(exit {run.returncode}, expected {expected_code}; output: {output.strip()!r})"
+                )
 
 
 def validate_ralph(root: Path, result: Validation) -> None:
@@ -143,6 +197,8 @@ def validate_ralph(root: Path, result: Validation) -> None:
         numbers.append(int(match.group(1)))
         task_text = read_text(task, result)
         check_headings(task, task_text, HANDOFF_HEADINGS, result)
+        if not re.search(r"Do not retry a blocked task", task_text, re.IGNORECASE):
+            result.error(f"{task}: missing blocked-task retry control")
         if task.name not in readme:
             result.error(f"{readme_path}: does not reference {task.name}")
         if task.stem not in progress:
@@ -170,7 +226,10 @@ def validate_ralph(root: Path, result: Validation) -> None:
         "ralph-complete",
         "README.md",
         "progress.md",
-        "next_task_name",
+        "select_next_task",
+        "BLOCKED_EXIT_CODE",
+        "NO_PROGRESS_EXIT_CODE",
+        "cksum",
     ):
         if token not in loop:
             result.error(f"{loop_path}: missing required token {token!r}")
@@ -186,6 +245,8 @@ def validate_ralph(root: Path, result: Validation) -> None:
     if syntax.returncode != 0:
         detail = syntax.stderr.strip() or "unknown syntax error"
         result.error(f"{loop_path}: bash -n failed: {detail}")
+    else:
+        validate_loop_behavior(loop_path, result)
 
 
 def main() -> int:

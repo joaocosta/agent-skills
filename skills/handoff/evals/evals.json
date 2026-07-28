@@ -27,7 +27,8 @@
         "README.md and progress.md contain all mandatory headings, task references agree across files, and AC1 through AC5 are covered.",
         "Every task file contains all mandatory task headings exactly once and in order.",
         "README.md requires a progress update, Conventional Commits message, concise task report, and ralph-complete completion marker.",
-        "loop.sh honors RALPH_CMD and MAX_ITERATIONS, disables Pi extension discovery with -ne, uses -n with an initiative/next-task session name derived from progress.md, stops on ralph-complete, and passes bash -n.",
+        "loop.sh honors RALPH_CMD and MAX_ITERATIONS, disables Pi extension discovery with -ne, uses -n with an initiative/next-task session name derived from progress.md, stops on ralph-complete, exits distinctly when blocked with no runnable task, rejects pending dependency deadlocks, detects a successful agent run that makes no progress, and passes bash -n.",
+        "README and task prompts route around blocked tasks only when another task is runnable, stop with Next task none when no runnable work remains, and prohibit retry without new evidence or resolution.",
         "The bundled deterministic validator passes with --shape ralph."
       ]
     },
