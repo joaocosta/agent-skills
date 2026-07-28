@@ -95,7 +95,7 @@ For Ralph tasks, direct the agent to inspect Git status, mark the task `in progr
 
 Initialize `progress.md` as execution state, never design authority. Start the initiative `not started`, every task `pending`, no current task, and task 01 as next. Never invent implementation progress.
 
-Copy [`assets/loop.sh`](assets/loop.sh) to the initiative as `loop.sh` and make it executable. Preserve its generic `ralph-complete` protocol, script-relative paths, logging, failure propagation, `RALPH_CMD` override, and `MAX_ITERATIONS` guard. Adapt it only for a concrete repository need that the design establishes; never hard-code the example initiative slug.
+Copy [`assets/loop.sh`](assets/loop.sh) to the initiative as `loop.sh` and make it executable. Preserve its generic `ralph-complete` protocol, script-relative paths, logging, failure propagation, `RALPH_CMD` override, `MAX_ITERATIONS` guard, disabled Pi extension discovery, and task-based session naming. By default, session names use `ralph:<initiative>:<next-task-file-stem>`, deriving the task from `progress.md` and verifying that its file exists; `RALPH_SESSION_PREFIX` may override the portion before the task name. Adapt the script only for a concrete repository need that the design establishes; never hard-code the example initiative slug.
 
 ## Validate mechanically
 

@@ -163,9 +163,23 @@ def validate_ralph(root: Path, result: Validation) -> None:
     else:
         result.error(f"missing {design_path}")
 
-    for token in ("RALPH_CMD", "MAX_ITERATIONS", "ralph-complete", "README.md"):
+    for token in (
+        "RALPH_CMD",
+        "MAX_ITERATIONS",
+        "RALPH_SESSION_PREFIX",
+        "ralph-complete",
+        "README.md",
+        "progress.md",
+        "next_task_name",
+    ):
         if token not in loop:
             result.error(f"{loop_path}: missing required token {token!r}")
+    if not re.search(r'^RALPH_CMD=.* -ne(?: |")', loop, re.MULTILINE):
+        result.error(f"{loop_path}: default RALPH_CMD must disable Pi extension discovery with -ne")
+    if not re.search(r'session_name=.*\$\{task_name\}', loop):
+        result.error(f"{loop_path}: session name must include the next task file stem")
+    if not re.search(r'"\$\{ralph_command\[@\]\}"\s+-n\s+', loop):
+        result.error(f"{loop_path}: Pi invocation must set a task-based session name with -n")
     if not loop_path.stat().st_mode & 0o111:
         result.error(f"{loop_path}: script is not executable")
     syntax = subprocess.run(["bash", "-n", str(loop_path)], capture_output=True, text=True, check=False)
