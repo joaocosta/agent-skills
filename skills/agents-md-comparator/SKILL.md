@@ -1,6 +1,7 @@
 ---
 name: agents-md-comparator
 description: Compare two alternative AGENTS.md instruction bundles against the same repository using static analysis and isolated empirical Pi coding-agent runs, then generate a self-contained evidence viewer for human review. Use when choosing between competing AGENTS.md files or instruction hierarchies. Do not use for comparing ordinary implementation branches or documents unrelated to coding-agent instructions.
+disable-model-invocation: true
 ---
 
 # AGENTS.md Comparator

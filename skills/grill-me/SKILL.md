@@ -1,6 +1,7 @@
 ---
 name: grill-me
 description: Conduct a rigorous, one-question-at-a-time design interview that challenges assumptions, resolves material product and architecture decisions, and persists a self-contained, implementation-ready design record for a separate handoff session. Use when the user asks to be grilled or wants a feature, system, plan, or technical proposal stress-tested before implementation. Do not use for ordinary troubleshooting, routine code review, or straightforward implementation with settled requirements.
+disable-model-invocation: true
 ---
 
 # Grill Me
