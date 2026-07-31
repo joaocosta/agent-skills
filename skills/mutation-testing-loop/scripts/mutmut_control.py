@@ -14,10 +14,44 @@ import sys
 import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import NotRequired, TypedDict, cast
 
 MUTANT_SUFFIX = re.compile(r"__mutmut_\d+$")
 REPORT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 CLASS_SEPARATOR = "ǁ"
+
+
+class SourceDetails(TypedDict, total=False):
+    source_file: str
+    source_line: int
+
+
+class MutationDetails(SourceDetails):
+    generated_file: NotRequired[str]
+    changes: list[str]
+
+
+class Mutant(TypedDict):
+    name: str
+    status: str
+    symbol: str
+    changes: NotRequired[list[str]]
+    generated_file: NotRequired[str]
+    source_file: NotRequired[str]
+    source_line: NotRequired[int]
+
+
+class SurvivorGroup(TypedDict):
+    symbol: str
+    count: int
+    mutants: list[Mutant]
+
+
+class SurvivorReport(TypedDict):
+    status_counts: dict[str, int]
+    symbol_status_counts: dict[str, dict[str, int]]
+    total: int
+    survivor_groups: list[SurvivorGroup]
 
 
 def mutmut_command(value: str) -> str:
@@ -149,7 +183,7 @@ def source_details(
     generated_path: Path,
     full_name: str,
     locations: dict[tuple[str, ...], int],
-) -> dict[str, object]:
+) -> SourceDetails:
     qualified_name = original_qualified_name(full_name)
     if qualified_name is None:
         return {}
@@ -163,8 +197,8 @@ def source_details(
     return {"source_file": relative_path.as_posix(), "source_line": line}
 
 
-def generated_diffs(mutants_dir: Path) -> dict[str, dict[str, object]]:
-    found: dict[str, dict[str, object]] = {}
+def generated_diffs(mutants_dir: Path) -> dict[str, MutationDetails]:
+    found: dict[str, MutationDetails] = {}
     for metadata_path in sorted(mutants_dir.rglob("*.py.meta")):
         generated_path = Path(str(metadata_path)[: -len(".meta")])
         try:
@@ -217,14 +251,14 @@ def triage_path(mutants_dir: Path, name: str | None) -> Path:
     return mutants_dir / f"triage{suffix}.md"
 
 
-def fingerprint(mutant: dict[str, object]) -> tuple[str, ...] | None:
+def fingerprint(mutant: Mutant) -> tuple[str, ...] | None:
     changes = mutant.get("changes")
-    if not isinstance(changes, list) or not changes:
+    if not changes:
         return None
-    return tuple(str(change).strip() for change in changes)
+    return tuple(change.strip() for change in changes)
 
 
-def fingerprint_text(mutant: dict[str, object]) -> str:
+def fingerprint_text(mutant: Mutant) -> str:
     mutation_fingerprint = fingerprint(mutant)
     if mutation_fingerprint is None:
         return "diff unavailable; inspect this group if it is a contender"
@@ -237,7 +271,7 @@ def representative_indexes(length: int, limit: int = 3) -> list[int]:
     return sorted({round(index * (length - 1) / (limit - 1)) for index in range(limit)})
 
 
-def group_location(group: dict[str, object]) -> str | None:
+def group_location(group: SurvivorGroup) -> str | None:
     for mutant in group["mutants"]:
         source_file = mutant.get("source_file")
         source_line = mutant.get("source_line")
@@ -246,13 +280,13 @@ def group_location(group: dict[str, object]) -> str | None:
     return None
 
 
-def group_heading(group: dict[str, object], level: int) -> str:
+def group_heading(group: SurvivorGroup, level: int) -> str:
     location = group_location(group)
     suffix = f" — {location}" if location else ""
     return f"{'#' * level} {group['symbol']} ({group['count']}){suffix}"
 
 
-def write_triage(payload: dict[str, object], path: Path) -> None:
+def write_triage(payload: SurvivorReport, path: Path) -> None:
     markdown = [
         "# Survivor-group triage",
         "",
@@ -285,24 +319,34 @@ def write_triage(payload: dict[str, object], path: Path) -> None:
 
 def write_reports(
     mutmut: str, mutants_dir: Path, report_name: str | None = None
-) -> tuple[list[dict[str, object]], Counter[str]]:
+) -> tuple[list[Mutant], Counter[str]]:
     records = parse_results(mutmut)
     statuses = Counter(record["status"] for record in records)
     diffs = generated_diffs(mutants_dir)
-    survivors: list[dict[str, object]] = []
+    survivors: list[Mutant] = []
     for record in records:
         if record["status"] != "survived":
             continue
-        survivors.append({**record, **diffs.get(record["name"], {"changes": []})})
+        survivors.append(
+            cast(
+                Mutant,
+                {
+                    **record,
+                    **diffs.get(
+                        record["name"], cast(MutationDetails, {"changes": []})
+                    ),
+                },
+            )
+        )
 
-    grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
+    grouped: dict[str, list[Mutant]] = defaultdict(list)
     for survivor in survivors:
         grouped[str(survivor["symbol"])].append(survivor)
     symbol_statuses: dict[str, Counter[str]] = defaultdict(Counter)
     for record in records:
         symbol_statuses[record["symbol"]][record["status"]] += 1
 
-    payload = {
+    payload: SurvivorReport = {
         "status_counts": dict(sorted(statuses.items())),
         "symbol_status_counts": {
             symbol: dict(sorted(counts.items()))
@@ -332,7 +376,7 @@ def write_reports(
         markdown.append(group_heading(group, 3))
         markdown.append("")
         fingerprints = Counter(
-            " → ".join(str(change).strip() for change in mutant.get("changes", []))
+            " → ".join(change.strip() for change in mutant.get("changes", []))
             or "diff unavailable; inspect this group with mutmut show if selected"
             for mutant in group["mutants"]
         )
@@ -346,7 +390,7 @@ def write_reports(
     return survivors, statuses
 
 
-def print_summary(survivors: list[dict[str, object]], statuses: Counter[str]) -> None:
+def print_summary(survivors: list[Mutant], statuses: Counter[str]) -> None:
     total = sum(statuses.values())
     counts = [
         f"total={total}",
@@ -389,16 +433,16 @@ def command_report(args: argparse.Namespace) -> int:
     return 0
 
 
-def load_report(mutants_dir: Path, name: str | None) -> dict[str, object]:
+def load_report(mutants_dir: Path, name: str | None) -> SurvivorReport:
     path = report_path(mutants_dir, name, "json")
     if not path.is_file():
         raise SystemExit(f"missing {path}; run the report command first")
-    return json.loads(path.read_text())
+    return cast(SurvivorReport, json.loads(path.read_text()))
 
 
 def selected_groups(
-    payload: dict[str, object], symbols: list[str]
-) -> list[dict[str, object]]:
+    payload: SurvivorReport, symbols: list[str]
+) -> list[SurvivorGroup]:
     groups_by_symbol = {group["symbol"]: group for group in payload["survivor_groups"]}
     missing = sorted(set(symbols) - set(groups_by_symbol))
     if missing:
@@ -443,8 +487,17 @@ def command_rerun(args: argparse.Namespace) -> int:
         record for record in parse_results(mutmut) if record["symbol"] in args.symbol
     ]
     diffs = generated_diffs(mutants_dir)
-    current = [
-        {**record, **diffs.get(record["name"], {"changes": []})} for record in records
+    current: list[Mutant] = [
+        cast(
+            Mutant,
+            {
+                **record,
+                **diffs.get(
+                    record["name"], cast(MutationDetails, {"changes": []})
+                ),
+            },
+        )
+        for record in records
     ]
     counts = Counter(str(record["status"]) for record in current)
     print(f"Current mutants in selected symbol(s): {len(current)}")
@@ -504,7 +557,7 @@ def command_rerun(args: argparse.Namespace) -> int:
     return return_code
 
 
-def survivor_fingerprints(group: dict[str, object] | None) -> Counter[tuple[str, ...]]:
+def survivor_fingerprints(group: SurvivorGroup | None) -> Counter[tuple[str, ...]]:
     if group is None:
         return Counter()
     return Counter(

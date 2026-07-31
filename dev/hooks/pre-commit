@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+# Run static validation for every maintained Python skill script.
+set -eu
+
+repository_root=$(git rev-parse --show-toplevel)
+cd "$repository_root"
+
+if [ ! -x .venv/bin/python ]; then
+    printf '%s\n' 'pre-commit: .venv/bin/python is unavailable; run `uv sync --group validation` before committing.' >&2
+    exit 1
+fi
+
+printf '%s\n' 'Running Ruff...'
+.venv/bin/python -m ruff check --quiet \
+    skills/agents-md-comparator/scripts \
+    skills/handoff/scripts \
+    skills/mutation-testing-loop/scripts \
+    skills/mutation-testing-loop/tests
+
+printf '%s\n' 'Running Pyright...'
+.venv/bin/python -m pyright
+
+printf '%s\n' 'Running Bandit...'
+.venv/bin/python -m bandit -q -c pyproject.toml -r \
+    skills/agents-md-comparator/scripts \
+    skills/handoff/scripts \
+    skills/mutation-testing-loop/scripts
