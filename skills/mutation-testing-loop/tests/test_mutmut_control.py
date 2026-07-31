@@ -46,6 +46,10 @@ class ReportNamingTests(unittest.TestCase):
                     (mutants_dir / f"survivors-{name}.json").read_text()
                 )
                 self.assertEqual(payload["status_counts"], {"killed": 1, "survived": 1})
+                self.assertEqual(
+                    payload["symbol_status_counts"],
+                    {"package.x_target": {"killed": 1, "survived": 1}},
+                )
                 self.assertTrue((mutants_dir / f"survivors-{name}.md").is_file())
                 triage = (mutants_dir / f"triage-{name}.md").read_text()
                 self.assertIn("package.x_target (1)", triage)
@@ -82,7 +86,9 @@ class MutantsDirectorySafetyTests(unittest.TestCase):
 
             with (
                 patch.object(controller, "git_root", return_value=root),
-                self.assertRaisesRegex(SystemExit, "no recognized mutmut-generated marker"),
+                self.assertRaisesRegex(
+                    SystemExit, "no recognized mutmut-generated marker"
+                ),
             ):
                 controller.require_safe_mutants_dir(mutants_dir, fresh=True)
 
@@ -117,6 +123,40 @@ class MutantsDirectorySafetyTests(unittest.TestCase):
                 controller.require_safe_mutants_dir(mutants_dir, fresh=False)
 
 
+class GeneratedDiffTests(unittest.TestCase):
+    def test_reports_original_source_location(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original_path = root / "src/package/module.py"
+            generated_path = root / "mutants/src/package/module.py"
+            original_path.parent.mkdir(parents=True)
+            generated_path.parent.mkdir(parents=True)
+            original_path.write_text("\ndef target():\n    return 1\n")
+            generated_path.write_text(
+                "def x_target__mutmut_orig():\n"
+                "    return 1\n\n"
+                "def x_target__mutmut_1():\n"
+                "    return 2\n"
+            )
+            generated_path.with_suffix(".py.meta").write_text(
+                json.dumps(
+                    {
+                        "exit_code_by_key": {
+                            "package.module.x_target__mutmut_1": 0,
+                        }
+                    }
+                )
+            )
+
+            details = controller.generated_diffs(root / "mutants")
+
+        self.assertEqual(
+            details["package.module.x_target__mutmut_1"]["source_file"],
+            "src/package/module.py",
+        )
+        self.assertEqual(details["package.module.x_target__mutmut_1"]["source_line"], 2)
+
+
 class InspectOutputTests(unittest.TestCase):
     def test_default_output_collapses_duplicate_fingerprints(self) -> None:
         report = {
@@ -125,8 +165,16 @@ class InspectOutputTests(unittest.TestCase):
                     "symbol": "package.x_target",
                     "count": 2,
                     "mutants": [
-                        {"name": "package.x_target__mutmut_1", "changes": ["- a", "+ b"]},
-                        {"name": "package.x_target__mutmut_2", "changes": ["- a", "+ b"]},
+                        {
+                            "name": "package.x_target__mutmut_1",
+                            "changes": ["- a", "+ b"],
+                            "source_file": "src/package.py",
+                            "source_line": 10,
+                        },
+                        {
+                            "name": "package.x_target__mutmut_2",
+                            "changes": ["- a", "+ b"],
+                        },
                     ],
                 }
             ]
@@ -145,6 +193,7 @@ class InspectOutputTests(unittest.TestCase):
                 controller.command_inspect(args)
 
         self.assertIn("2 survivors, 1 distinct mutation", output.getvalue())
+        self.assertIn("at src/package.py:10", output.getvalue())
         self.assertIn("2× - a → + b", output.getvalue())
         self.assertNotIn("__mutmut_1", output.getvalue())
 
@@ -204,9 +253,9 @@ class ScopedRerunOutputTests(unittest.TestCase):
             )
             self.assertIn("Mutation status: killed=2", output.getvalue())
             self.assertNotIn("__mutmut_1", output.getvalue())
-            self.assertNotIn("Unresolved selected mutants", output.getvalue())
+            self.assertNotIn("Unresolved current mutations", output.getvalue())
 
-    def test_unresolved_mutants_remain_visible(self) -> None:
+    def test_unresolved_mutations_are_grouped_by_fingerprint(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             mutants_dir = Path(directory)
             executable = mutants_dir / "mutmut"
@@ -239,12 +288,20 @@ class ScopedRerunOutputTests(unittest.TestCase):
             with (
                 patch.object(controller, "run_captured", return_value=0),
                 patch.object(controller, "parse_results", return_value=current),
+                patch.object(
+                    controller,
+                    "generated_diffs",
+                    return_value={
+                        "package.x_target__mutmut_1": {"changes": ["- old", "+ new"]}
+                    },
+                ),
                 contextlib.redirect_stdout(output),
             ):
                 controller.command_rerun(args)
 
-            self.assertIn("Unresolved current mutants", output.getvalue())
-            self.assertIn("package.x_target__mutmut_1", output.getvalue())
+            self.assertIn("Unresolved current mutations", output.getvalue())
+            self.assertIn("1× survived: - old → + new", output.getvalue())
+            self.assertNotIn("package.x_target__mutmut_1", output.getvalue())
 
 
 class CompactTriageTests(unittest.TestCase):
@@ -257,6 +314,8 @@ class CompactTriageTests(unittest.TestCase):
                     {
                         "name": f"package.x_large__mutmut_{index}",
                         "changes": [f"- old {index}", f"+ new {index}"],
+                        "source_file": "src/package.py",
+                        "source_line": 20,
                     }
                     for index in range(5)
                 ],
@@ -274,7 +333,7 @@ class CompactTriageTests(unittest.TestCase):
             controller.write_triage({"survivor_groups": groups}, path)
             text = path.read_text()
 
-        self.assertIn("package.x_large (5)", text)
+        self.assertIn("package.x_large (5) — src/package.py:20", text)
         self.assertIn("package.x_small (1)", text)
         self.assertIn("2 additional distinct mutation(s)", text)
         self.assertNotIn("old 1", text)
@@ -283,8 +342,9 @@ class CompactTriageTests(unittest.TestCase):
 class CompareReportsTests(unittest.TestCase):
     def test_compare_uses_diffs_instead_of_unstable_mutant_ids(self) -> None:
         before = {
-            "total": 2,
-            "status_counts": {"survived": 2},
+            "total": 3,
+            "status_counts": {"survived": 2, "timeout": 1},
+            "symbol_status_counts": {"package.x_target": {"survived": 2, "timeout": 1}},
             "survivor_groups": [
                 {
                     "symbol": "package.x_target",
@@ -305,6 +365,7 @@ class CompareReportsTests(unittest.TestCase):
         after = {
             "total": 3,
             "status_counts": {"killed": 1, "survived": 2},
+            "symbol_status_counts": {"package.x_target": {"killed": 1, "survived": 2}},
             "survivor_groups": [
                 {
                     "symbol": "package.x_target",
@@ -336,6 +397,8 @@ class CompareReportsTests(unittest.TestCase):
             with contextlib.redirect_stdout(output):
                 controller.command_compare(args)
 
+        self.assertIn("all statuses before: survived=2, timeout=1", output.getvalue())
+        self.assertIn("all statuses after: killed=1, survived=2", output.getvalue())
         self.assertIn("same-diff persisted=1", output.getvalue())
         self.assertIn("no-longer-surviving=1", output.getvalue())
         self.assertIn("new-diff=1", output.getvalue())

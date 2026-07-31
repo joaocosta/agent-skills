@@ -17,6 +17,7 @@ from pathlib import Path
 
 MUTANT_SUFFIX = re.compile(r"__mutmut_\d+$")
 REPORT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+CLASS_SEPARATOR = "ǁ"
 
 
 def mutmut_command(value: str) -> str:
@@ -118,14 +119,64 @@ def changed_lines(original: ast.AST, mutant: ast.AST) -> list[str]:
     return [line for line in difflib.ndiff(before, after) if line[:2] in {"- ", "+ "}]
 
 
+def definition_locations(tree: ast.AST) -> dict[tuple[str, ...], int]:
+    locations: dict[tuple[str, ...], int] = {}
+
+    def visit_body(body: list[ast.stmt], prefix: tuple[str, ...] = ()) -> None:
+        for node in body:
+            if isinstance(node, ast.ClassDef):
+                visit_body(node.body, (*prefix, node.name))
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                qualified_name = (*prefix, node.name)
+                locations[qualified_name] = node.lineno
+                visit_body(node.body, qualified_name)
+
+    visit_body(getattr(tree, "body", []))
+    return locations
+
+
+def original_qualified_name(full_name: str) -> tuple[str, ...] | None:
+    symbol = MUTANT_SUFFIX.sub("", full_name).rsplit(".", 1)[-1]
+    if symbol.startswith(f"x{CLASS_SEPARATOR}"):
+        return tuple(symbol[2:].split(CLASS_SEPARATOR))
+    if symbol.startswith("x_"):
+        return (symbol[2:],)
+    return None
+
+
+def source_details(
+    mutants_dir: Path,
+    generated_path: Path,
+    full_name: str,
+    locations: dict[tuple[str, ...], int],
+) -> dict[str, object]:
+    qualified_name = original_qualified_name(full_name)
+    if qualified_name is None:
+        return {}
+    line = locations.get(qualified_name)
+    if line is None:
+        return {}
+    try:
+        relative_path = generated_path.relative_to(mutants_dir)
+    except ValueError:
+        return {}
+    return {"source_file": relative_path.as_posix(), "source_line": line}
+
+
 def generated_diffs(mutants_dir: Path) -> dict[str, dict[str, object]]:
     found: dict[str, dict[str, object]] = {}
     for metadata_path in sorted(mutants_dir.rglob("*.py.meta")):
-        source_path = Path(str(metadata_path)[: -len(".meta")])
+        generated_path = Path(str(metadata_path)[: -len(".meta")])
         try:
-            tree = ast.parse(source_path.read_text())
+            tree = ast.parse(generated_path.read_text())
         except (OSError, SyntaxError, UnicodeDecodeError):
             continue
+        try:
+            relative_path = generated_path.relative_to(mutants_dir)
+            original_tree = ast.parse((mutants_dir.parent / relative_path).read_text())
+            locations = definition_locations(original_tree)
+        except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+            locations = {}
         functions = {
             node.name: node
             for node in ast.walk(tree)
@@ -140,8 +191,9 @@ def generated_diffs(mutants_dir: Path) -> dict[str, dict[str, object]]:
             if mutant is None or original is None:
                 continue
             found[full_name] = {
-                "generated_file": str(source_path),
+                "generated_file": str(generated_path),
                 "changes": changed_lines(original, mutant),
+                **source_details(mutants_dir, generated_path, full_name, locations),
             }
     return found
 
@@ -185,6 +237,21 @@ def representative_indexes(length: int, limit: int = 3) -> list[int]:
     return sorted({round(index * (length - 1) / (limit - 1)) for index in range(limit)})
 
 
+def group_location(group: dict[str, object]) -> str | None:
+    for mutant in group["mutants"]:
+        source_file = mutant.get("source_file")
+        source_line = mutant.get("source_line")
+        if source_file and source_line:
+            return f"{source_file}:{source_line}"
+    return None
+
+
+def group_heading(group: dict[str, object], level: int) -> str:
+    location = group_location(group)
+    suffix = f" — {location}" if location else ""
+    return f"{'#' * level} {group['symbol']} ({group['count']}){suffix}"
+
+
 def write_triage(payload: dict[str, object], path: Path) -> None:
     markdown = [
         "# Survivor-group triage",
@@ -194,7 +261,7 @@ def write_triage(payload: dict[str, object], path: Path) -> None:
     ]
     for group in payload["survivor_groups"]:
         mutants = group["mutants"]
-        markdown.append(f"## {group['symbol']} ({group['count']})")
+        markdown.append(group_heading(group, 2))
         markdown.append("")
         unique: list[tuple[str, int]] = []
         counts: Counter[str] = Counter(fingerprint_text(mutant) for mutant in mutants)
@@ -231,9 +298,16 @@ def write_reports(
     grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
     for survivor in survivors:
         grouped[str(survivor["symbol"])].append(survivor)
+    symbol_statuses: dict[str, Counter[str]] = defaultdict(Counter)
+    for record in records:
+        symbol_statuses[record["symbol"]][record["status"]] += 1
 
     payload = {
         "status_counts": dict(sorted(statuses.items())),
+        "symbol_status_counts": {
+            symbol: dict(sorted(counts.items()))
+            for symbol, counts in sorted(symbol_statuses.items())
+        },
         "total": len(records),
         "survivor_groups": [
             {
@@ -255,7 +329,7 @@ def write_reports(
     )
     markdown.extend(["", "## Groups", ""])
     for group in payload["survivor_groups"]:
-        markdown.append(f"### {group['symbol']} ({group['count']})")
+        markdown.append(group_heading(group, 3))
         markdown.append("")
         fingerprints = Counter(
             " → ".join(str(change).strip() for change in mutant.get("changes", []))
@@ -340,9 +414,11 @@ def command_inspect(args: argparse.Namespace) -> int:
         mutations = group["mutants"]
         fingerprints = Counter(fingerprint_text(mutant) for mutant in mutations)
         mutation_label = "mutation" if len(fingerprints) == 1 else "mutations"
+        location = group_location(group)
+        location_suffix = f" at {location}" if location else ""
         print(
             f"{group['symbol']} ({group['count']} survivors, "
-            f"{len(fingerprints)} distinct {mutation_label})"
+            f"{len(fingerprints)} distinct {mutation_label}){location_suffix}"
         )
         if args.verbose:
             for mutant in mutations:
@@ -412,9 +488,14 @@ def command_rerun(args: argparse.Namespace) -> int:
 
     unresolved = [record for record in current if record["status"] != "killed"]
     if unresolved:
-        print("Unresolved current mutants:")
-        for record in unresolved:
-            print(f"{record['status']:>12}  {record['name']}")
+        print("Unresolved current mutations:")
+        unresolved_fingerprints = Counter(
+            (str(record["status"]), fingerprint_text(record)) for record in unresolved
+        )
+        for (status, text), count in unresolved_fingerprints.items():
+            if len(text) > 300:
+                text = text[:297] + "..."
+            print(f"  {count}× {status}: {text}")
     if args.verbose:
         print("All current mutants:")
         for record in current:
@@ -470,6 +551,19 @@ def command_compare(args: argparse.Namespace) -> int:
             else 0
         )
         print(f"{symbol}:")
+        before_statuses = before.get("symbol_status_counts", {}).get(symbol)
+        after_statuses = after.get("symbol_status_counts", {}).get(symbol)
+        if before_statuses is not None or after_statuses is not None:
+            before_text = ", ".join(
+                f"{key}={value}"
+                for key, value in sorted((before_statuses or {}).items())
+            )
+            after_text = ", ".join(
+                f"{key}={value}"
+                for key, value in sorted((after_statuses or {}).items())
+            )
+            print(f"  all statuses before: {before_text or 'none'}")
+            print(f"  all statuses after: {after_text or 'none'}")
         print(
             f"  survivors before={before_group['count']} after={after_group['count'] if after_group else 0}; "
             f"same-diff persisted={sum(persisted.values())}, no-longer-surviving={sum(removed.values())}, "

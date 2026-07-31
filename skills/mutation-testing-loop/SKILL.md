@@ -28,8 +28,8 @@ Resolve this skill's directory as `<skill-dir>`, then run from the project root:
 The controller suppresses mutmut's high-volume progress display and retains the initial evidence as:
 
 - `mutants/mutmut-initial-run.log` — full progress and diagnostics;
-- `mutants/triage-initial.md` — every survivor group with deterministic representative mutations;
-- `mutants/survivors-initial.json` — machine-readable complete survivor data;
+- `mutants/triage-initial.md` — every survivor group with source anchors and deterministic representative mutations;
+- `mutants/survivors-initial.json` — machine-readable complete survivor data plus per-symbol status counts;
 - `mutants/survivors-initial.md` — complete human-readable survivor data.
 
 Named reports prevent the final pass from overwriting the inventory used to choose the finding.
@@ -40,11 +40,13 @@ If the full run fails or has errors that make its evidence unreliable, diagnose 
 
 ## Triage every survivor group
 
-Read all of `mutants/triage-initial.md`. This is the mandatory all-group pass; representative mutations are leads, not a substitute for full inspection of contenders. Locate candidate symbols and focused tests, inspect their relevant source and contracts, then print complete survivor details only for plausible contenders:
+Read all of `mutants/triage-initial.md`. This is the mandatory all-group pass; representative mutations are leads, not a substitute for full inspection of contenders. Use the inventory's source anchors to locate candidate code and focused tests, inspect their relevant contracts, then print complete survivor details only for plausible contenders. Batch nearby contenders in one invocation when the combined output will remain manageable:
 
 ```bash
 <project-python> <skill-dir>/scripts/mutmut_control.py inspect \
-  --report-name initial --symbol '<exact symbol from triage-initial.md>'
+  --report-name initial \
+  --symbol '<exact symbol from triage-initial.md>' \
+  --symbol '<another plausible contender>'
 ```
 
 Group further when different symbols expose the same behavioral or design issue. Do not equate syntactic similarity with a common root cause. Keep broad searches and large test modules out of context: locate candidate symbols and focused tests first, then read only relevant ranges unless the whole file is needed.
@@ -93,9 +95,9 @@ After changing code:
      --report-name initial --symbol '<exact symbol from triage-initial.md>'
    ```
 
-   The controller uses a symbol wildcard so mutmut regenerates and executes all current mutants in that symbol. It compares baseline survivors by diff fingerprint; mutant numeric IDs are not stable after production edits. Treat `not generated` as requiring a legitimate source-change explanation, not as a kill.
+   The controller uses a symbol wildcard so mutmut regenerates and executes all current mutants in that symbol. It compares baseline survivors by diff fingerprint and groups unresolved current mutations by status and fingerprint; use `--verbose` only when unstable numeric mutant IDs are needed for diagnosis. Treat `not generated` as requiring a legitimate source-change explanation, not as a kill.
 
-3. Run the exact repository commit gate plus required format, lint, type, focused, and broader test checks. Resolve validation-environment limitations before spending time on the final full mutation pass.
+3. Run the exact repository commit gate plus required format, lint, type, focused, and broader test checks. Build a deduplicated validation plan: do not separately run a broad check already contained in the discovered gate, but do retain focused checks and any required checks the gate omits. Resolve validation-environment limitations before spending time on the final full mutation pass.
 4. Run a final complete mutation pass without deleting generated state:
 
    ```bash
@@ -109,7 +111,7 @@ Compare the selected group by diff rather than numeric mutant ID:
   --before initial --after final --symbol '<exact selected symbol>'
 ```
 
-Confirm that original survivor diffs no longer survive for a legitimate reason and that the affected group has no new relevant survivor. The comparison can prove persistence or absence from the survivor set; use the scoped rerun and source diff to distinguish killed from no longer generated. Never infer a kill from ordinary tests or from a missing old mutant name alone.
+Confirm that original survivor diffs no longer survive for a legitimate reason, that the affected group has no new relevant survivor, and that its final per-symbol statuses contain no unexplained timeout or error. The comparison can prove persistence or absence from the survivor set; use the scoped rerun and source diff to distinguish killed from no longer generated. Never infer a kill from ordinary tests, unchanged global timeout counts, or a missing old mutant name alone.
 
 ## Commit only valuable changes
 
@@ -132,7 +134,7 @@ List the selected group first, followed by the most important deferred groups. F
 Explain original behavior, surviving mutation, why it mattered, why tests missed it, and whether the root issue was tests, production, specification, or tooling.
 
 ### Resolution and verification
-Explain the change's material value, why tests are behavioral rather than implementation-coupled, commands and outcomes, and direct mutation evidence.
+Explain the change's material value, the actual test boundary and any implementation coupling, why that coupling is proportionate, commands and outcomes, and direct mutation evidence. Do not describe an interaction test as end-to-end or claim that it avoids private state when it does not.
 
 ### Remaining work
 Name the leading deferred groups without changing them. Point to `mutants/triage-initial.md` for the reviewed all-group inventory and the `survivors-*.md` files for complete before-and-after details.
