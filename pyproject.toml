@@ -36,6 +36,12 @@ typeCheckingMode = "strict"
 pythonVersion = "3.11"
 venvPath = "."
 venv = ".venv"
+deprecateTypingAliases = true
+reportCallInDefaultInitializer = "error"
+reportPropertyTypeMismatch = "error"
+reportUninitializedInstanceVariable = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+reportUnreachable = "error"
 
 [tool.bandit]
 # These scripts intentionally launch trusted local tools without a shell.

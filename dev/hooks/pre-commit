@@ -25,7 +25,7 @@ printf '%s\n' 'Checking Ruff formatting...'
     skills/mutation-testing-loop/tests
 
 printf '%s\n' 'Running Pyright...'
-.venv/bin/python -m pyright
+.venv/bin/python -m pyright --warnings
 
 printf '%s\n' 'Running Bandit...'
 .venv/bin/python -m bandit -q -c pyproject.toml -r \
