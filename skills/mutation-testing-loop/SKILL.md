@@ -15,9 +15,7 @@ Read repository guidance, mutation configuration, test configuration, relevant d
 
 Require `mutmut` 3.x and locate its executable. The bundled controller defaults to `.venv/bin/mutmut`; pass `--mutmut <path>` when the project uses another environment.
 
-Protect user work. Do not discard unrelated changes, include them in a commit, or begin destructive cleanup when generated mutation state is not clearly at `<repository>/mutants`.
-
-Ensure `mutants/` is ignored by Git before running. Add the narrow ignore entry when needed, but never commit generated contents.
+Protect user work. Do not discard unrelated changes or include them in a commit. Ensure `mutants/` is ignored by Git before running; add the narrow ignore entry when needed, but never commit generated contents. The controller refuses tracked or unignored mutation state and restricts `--fresh` cleanup to `<repository>/mutants` with a recognized generated-state marker. If that check fails, inspect the directory and preserve it rather than bypassing the guard.
 
 ## Run quietly from clean state
 
@@ -36,7 +34,7 @@ The controller suppresses mutmut's high-volume progress display and retains the 
 
 Named reports prevent the final pass from overwriting the inventory used to choose the finding.
 
-Do not stream the raw run log, call `mutmut results --all true` directly, load the complete JSON or Markdown reports into context, invoke `mutmut show` for every survivor, or read generated multi-megabyte Python files. Read all of the compact triage inventory, then use the controller's `inspect` command for plausible contenders. The complete reports remain audit artifacts. Read the raw log only around a specific failure.
+Do not stream the raw run log, call `mutmut results --all true` directly, load the complete JSON or Markdown reports into context, invoke `mutmut show` for every survivor, or read generated multi-megabyte Python files. Read all of the compact triage inventory, then use the controller's `inspect` command for plausible contenders. Its default output prints every distinct mutation fingerprint with a count while omitting repetitive mutant IDs; use `--verbose` only when individual names are actually needed. The complete reports remain audit artifacts. Read the raw log only around a specific failure.
 
 If the full run fails or has errors that make its evidence unreliable, diagnose that limitation rather than selecting a finding from incomplete results.
 
@@ -122,7 +120,7 @@ When valuable changes were made and validation passed, create one Conventional C
 Report:
 
 ### Outcome
-Whether a material change and commit were made, plus commit hash and message when applicable.
+Whether a material change and commit were made, plus commit hash and message when applicable. Distinguish tracked working-tree status from retained ignored mutation state, and confirm generated state was not committed.
 
 ### Mutation run
 Initial and final commands and counts for total, killed, survived, timeout, error, and other available statuses; note limitations.

@@ -37,6 +37,60 @@ def run_captured(command: list[str], log_path: Path) -> int:
     return result.returncode
 
 
+def git_root() -> Path | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        return None
+    return Path(result.stdout.strip()).resolve()
+
+
+def require_safe_mutants_dir(mutants_dir: Path, fresh: bool) -> None:
+    root = git_root()
+    expected = (root or Path.cwd().resolve()) / "mutants"
+    resolved = mutants_dir.resolve()
+    if resolved != expected:
+        raise SystemExit(
+            f"mutants directory must be the repository-root generated directory: {expected}"
+        )
+
+    if root is not None:
+        relative = resolved.relative_to(root)
+        tracked = subprocess.run(
+            ["git", "ls-files", "--", str(relative)],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if tracked.returncode or tracked.stdout.strip():
+            raise SystemExit(f"refusing to use tracked mutation state at {relative}/")
+        ignored = subprocess.run(
+            ["git", "check-ignore", "--quiet", "--", str(relative)],
+            cwd=root,
+            check=False,
+        )
+        if ignored.returncode != 0:
+            raise SystemExit(
+                f"mutation state must be ignored by Git before running: {relative}/"
+            )
+
+    if fresh and resolved.exists() and any(resolved.iterdir()):
+        generated_markers = (
+            resolved / "mutmut-stats.json",
+            resolved / "survivors.json",
+            resolved / "pyproject.toml",
+        )
+        if not any(marker.is_file() for marker in generated_markers):
+            raise SystemExit(
+                f"refusing to remove {resolved}: no recognized mutmut-generated marker"
+            )
+
+
 def parse_results(mutmut: str) -> list[dict[str, str]]:
     result = subprocess.run(
         [mutmut, "results", "--all", "true"],
@@ -233,9 +287,8 @@ def command_run(args: argparse.Namespace) -> int:
     mutmut = mutmut_command(args.mutmut)
     stem = report_stem(args.report_name)
     mutants_dir = Path(args.mutants_dir)
+    require_safe_mutants_dir(mutants_dir, args.fresh)
     if args.fresh and mutants_dir.exists():
-        if mutants_dir.resolve() == Path.cwd().resolve():
-            raise SystemExit("refusing to remove the working directory")
         shutil.rmtree(mutants_dir)
     default_log = (
         f"mutmut-{args.report_name}-run.log" if args.report_name else "mutmut-run.log"
@@ -284,10 +337,20 @@ def command_inspect(args: argparse.Namespace) -> int:
         load_report(Path(args.mutants_dir), args.report_name), args.symbol
     )
     for group in groups:
-        print(f"{group['symbol']} ({group['count']} survivors)")
-        for mutant in group["mutants"]:
-            print(f"  {mutant['name']}")
-            print(f"    {fingerprint_text(mutant)}")
+        mutations = group["mutants"]
+        fingerprints = Counter(fingerprint_text(mutant) for mutant in mutations)
+        mutation_label = "mutation" if len(fingerprints) == 1 else "mutations"
+        print(
+            f"{group['symbol']} ({group['count']} survivors, "
+            f"{len(fingerprints)} distinct {mutation_label})"
+        )
+        if args.verbose:
+            for mutant in mutations:
+                print(f"  {mutant['name']}")
+                print(f"    {fingerprint_text(mutant)}")
+        else:
+            for text, count in fingerprints.items():
+                print(f"  {count}× {text}")
     return 0
 
 
@@ -450,6 +513,11 @@ def parser() -> argparse.ArgumentParser:
     )
     inspect.add_argument("--symbol", action="append", required=True)
     inspect.add_argument("--report-name", help="read groups from this named report")
+    inspect.add_argument(
+        "--verbose",
+        action="store_true",
+        help="print every mutant name instead of distinct mutation counts",
+    )
     inspect.set_defaults(handler=command_inspect)
 
     rerun = commands.add_parser(

@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from argparse import Namespace
@@ -52,6 +53,100 @@ class ReportNamingTests(unittest.TestCase):
     def test_report_name_rejects_path_traversal(self) -> None:
         with self.assertRaisesRegex(SystemExit, "report name"):
             controller.report_stem("../outside")
+
+
+class MutantsDirectorySafetyTests(unittest.TestCase):
+    def initialize_repository(self, root: Path, ignore: bool = True) -> None:
+        subprocess.run(["git", "init", "--quiet", str(root)], check=True)
+        if ignore:
+            (root / ".gitignore").write_text("mutants/\n")
+
+    def test_accepts_ignored_generated_state_at_repository_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.initialize_repository(root)
+            mutants_dir = root / "mutants"
+            mutants_dir.mkdir()
+            (mutants_dir / "mutmut-stats.json").write_text("{}")
+
+            with patch.object(controller, "git_root", return_value=root):
+                controller.require_safe_mutants_dir(mutants_dir, fresh=True)
+
+    def test_rejects_fresh_removal_without_generated_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.initialize_repository(root)
+            mutants_dir = root / "mutants"
+            mutants_dir.mkdir()
+            (mutants_dir / "user-data.txt").write_text("keep me")
+
+            with (
+                patch.object(controller, "git_root", return_value=root),
+                self.assertRaisesRegex(SystemExit, "no recognized mutmut-generated marker"),
+            ):
+                controller.require_safe_mutants_dir(mutants_dir, fresh=True)
+
+    def test_rejects_unignored_mutation_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.initialize_repository(root, ignore=False)
+
+            with (
+                patch.object(controller, "git_root", return_value=root),
+                self.assertRaisesRegex(SystemExit, "must be ignored by Git"),
+            ):
+                controller.require_safe_mutants_dir(root / "mutants", fresh=False)
+
+    def test_rejects_tracked_contents_under_ignored_mutation_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.initialize_repository(root)
+            mutants_dir = root / "mutants"
+            mutants_dir.mkdir()
+            (mutants_dir / "tracked.txt").write_text("tracked")
+            subprocess.run(
+                ["git", "add", "--force", "mutants/tracked.txt"],
+                cwd=root,
+                check=True,
+            )
+
+            with (
+                patch.object(controller, "git_root", return_value=root),
+                self.assertRaisesRegex(SystemExit, "tracked mutation state"),
+            ):
+                controller.require_safe_mutants_dir(mutants_dir, fresh=False)
+
+
+class InspectOutputTests(unittest.TestCase):
+    def test_default_output_collapses_duplicate_fingerprints(self) -> None:
+        report = {
+            "survivor_groups": [
+                {
+                    "symbol": "package.x_target",
+                    "count": 2,
+                    "mutants": [
+                        {"name": "package.x_target__mutmut_1", "changes": ["- a", "+ b"]},
+                        {"name": "package.x_target__mutmut_2", "changes": ["- a", "+ b"]},
+                    ],
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            mutants_dir = Path(directory)
+            (mutants_dir / "survivors-initial.json").write_text(json.dumps(report))
+            args = Namespace(
+                mutants_dir=str(mutants_dir),
+                report_name="initial",
+                symbol=["package.x_target"],
+                verbose=False,
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                controller.command_inspect(args)
+
+        self.assertIn("2 survivors, 1 distinct mutation", output.getvalue())
+        self.assertIn("2× - a → + b", output.getvalue())
+        self.assertNotIn("__mutmut_1", output.getvalue())
 
 
 class ScopedRerunOutputTests(unittest.TestCase):
