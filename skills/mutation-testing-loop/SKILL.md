@@ -11,7 +11,7 @@ Perform exactly one improvement iteration and stop. Mutation testing is an inves
 
 ## Establish the project contract
 
-Read repository guidance, mutation configuration, test configuration, relevant documentation, and current Git status. Use the project's existing environment; do not install or upgrade dependencies unless asked.
+Read repository guidance, mutation configuration, test configuration, relevant documentation, and current Git status. Discover the repository's actual commit gate, including configured tracked hooks, before editing so required validation is not first discovered during commit. Use the project's existing environment; do not install or upgrade dependencies unless asked.
 
 Require `mutmut` 3.x and locate its executable. The bundled controller defaults to `.venv/bin/mutmut`; pass `--mutmut <path>` when the project uses another environment.
 
@@ -30,18 +30,26 @@ Resolve this skill's directory as `<skill-dir>`, then run from the project root:
 The controller suppresses mutmut's high-volume progress display and retains the initial evidence as:
 
 - `mutants/mutmut-initial-run.log` — full progress and diagnostics;
-- `mutants/survivors-initial.json` — machine-readable statuses, groups, and compact diffs;
-- `mutants/survivors-initial.md` — all survivor groups and their mutations.
+- `mutants/triage-initial.md` — every survivor group with deterministic representative mutations;
+- `mutants/survivors-initial.json` — machine-readable complete survivor data;
+- `mutants/survivors-initial.md` — complete human-readable survivor data.
 
 Named reports prevent the final pass from overwriting the inventory used to choose the finding.
 
-Do not stream the raw run log, call `mutmut results --all true` directly, invoke `mutmut show` for every survivor, or read generated multi-megabyte Python files. Inspect the concise artifacts instead. Read the raw log only around a specific failure.
+Do not stream the raw run log, call `mutmut results --all true` directly, load the complete JSON or Markdown reports into context, invoke `mutmut show` for every survivor, or read generated multi-megabyte Python files. Read all of the compact triage inventory, then use the controller's `inspect` command for plausible contenders. The complete reports remain audit artifacts. Read the raw log only around a specific failure.
 
 If the full run fails or has errors that make its evidence unreliable, diagnose that limitation rather than selecting a finding from incomplete results.
 
 ## Triage every survivor group
 
-Read all of `mutants/survivors-initial.md`, in chunks when necessary. Group further when different symbols expose the same behavioral or design issue. Do not equate syntactic similarity with a common root cause. Keep broad searches and large test modules out of context: locate candidate symbols and focused tests first, then read only relevant ranges unless the whole file is needed.
+Read all of `mutants/triage-initial.md`. This is the mandatory all-group pass; representative mutations are leads, not a substitute for full inspection of contenders. Locate candidate symbols and focused tests, inspect their relevant source and contracts, then print complete survivor details only for plausible contenders:
+
+```bash
+<project-python> <skill-dir>/scripts/mutmut_control.py inspect \
+  --report-name initial --symbol '<exact symbol from triage-initial.md>'
+```
+
+Group further when different symbols expose the same behavioral or design issue. Do not equate syntactic similarity with a common root cause. Keep broad searches and large test modules out of context: locate candidate symbols and focused tests first, then read only relevant ranges unless the whole file is needed.
 
 Rank every group using repository evidence:
 
@@ -50,7 +58,7 @@ Rank every group using repository evidence:
 3. regression risk;
 4. value and maintainability of a resolution.
 
-Select only the highest-value unresolved group. If no group supports a valuable change, make no change and report that conclusion. Do not move to a second group.
+Select only the highest-value unresolved group. Do not silently substitute the easiest or smallest group: explicitly compare the selected group with its nearest contenders using the four criteria above. If a high-value symbol is broad, consider whether one coherent survivor subgroup is the single issue to resolve rather than deferring it for breadth alone. If no group supports a valuable change, make no change and report that conclusion. Do not move to a second group.
 
 Before editing, inspect the selected production code, callers, behavioral boundaries, tests, types, validation, documentation, and conventions. Classify its relevant survivors as one or more of:
 
@@ -62,7 +70,7 @@ Before editing, inspect the selected production code, callers, behavioral bounda
 - mutation-tool limitation;
 - unresolved specification question.
 
-Do not invent intended behavior. Equivalent, impossible, low-value, and tool-limited mutants are findings, not invitations to add implementation-coupled tests or score-only exclusions.
+Do not invent intended behavior. Equivalent, impossible, low-value, and tool-limited mutants are findings, not invitations to add implementation-coupled tests, rewrite equally clear code merely to change mutant generation, or add score-only exclusions.
 
 ## Resolve one material issue
 
@@ -80,21 +88,30 @@ Avoid tests that mirror private implementation, weakened assertions or behavior,
 After changing code:
 
 1. Run the directly relevant tests and make them pass.
-2. Rerun the originally surviving mutants for each selected exact symbol:
+2. Rerun the selected exact symbol:
 
    ```bash
    <project-python> <skill-dir>/scripts/mutmut_control.py --mutmut <mutmut-path> rerun \
-     --report-name initial --symbol '<exact symbol from survivors-initial.md>'
+     --report-name initial --symbol '<exact symbol from triage-initial.md>'
    ```
 
-3. Run repository-required format, lint, type, and broader test checks.
+   The controller uses a symbol wildcard so mutmut regenerates and executes all current mutants in that symbol. It compares baseline survivors by diff fingerprint; mutant numeric IDs are not stable after production edits. Treat `not generated` as requiring a legitimate source-change explanation, not as a kill.
+
+3. Run the exact repository commit gate plus required format, lint, type, focused, and broader test checks. Resolve validation-environment limitations before spending time on the final full mutation pass.
 4. Run a final complete mutation pass without deleting generated state:
 
    ```bash
    <project-python> <skill-dir>/scripts/mutmut_control.py --mutmut <mutmut-path> run --report-name final
    ```
 
-Compare `mutants/survivors-initial.json` with `mutants/survivors-final.json` for the selected symbol. Confirm that its original survivors are killed or no longer generated for a legitimate reason and that the affected group has no new relevant survivor. Never infer a kill from ordinary tests or from a missing old mutant name alone; when identities change, compare before-and-after diffs.
+Compare the selected group by diff rather than numeric mutant ID:
+
+```bash
+<project-python> <skill-dir>/scripts/mutmut_control.py compare \
+  --before initial --after final --symbol '<exact selected symbol>'
+```
+
+Confirm that original survivor diffs no longer survive for a legitimate reason and that the affected group has no new relevant survivor. The comparison can prove persistence or absence from the survivor set; use the scoped rerun and source diff to distinguish killed from no longer generated. Never infer a kill from ordinary tests or from a missing old mutant name alone.
 
 ## Commit only valuable changes
 
@@ -111,7 +128,7 @@ Whether a material change and commit were made, plus commit hash and message whe
 Initial and final commands and counts for total, killed, survived, timeout, error, and other available statuses; note limitations.
 
 ### Ranked findings
-List the selected group first, followed by the most important deferred groups. For each give symbol/file, representative mutation, behavioral effect, evidence-based assessment, and disposition. State that all groups in `mutants/survivors-initial.md` were reviewed; do not reproduce hundreds of low-value entries.
+List the selected group first, followed by the most important deferred groups. For each give symbol/file, representative mutation, behavioral effect, evidence-based assessment, and disposition. State that all groups in `mutants/triage-initial.md` were reviewed; do not reproduce hundreds of low-value entries. Briefly state why the selected group outranked its nearest contender.
 
 ### Selected finding
 Explain original behavior, surviving mutation, why it mattered, why tests missed it, and whether the root issue was tests, production, specification, or tooling.
@@ -120,4 +137,4 @@ Explain original behavior, surviving mutation, why it mattered, why tests missed
 Explain the change's material value, why tests are behavioral rather than implementation-coupled, commands and outcomes, and direct mutation evidence.
 
 ### Remaining work
-Name the leading deferred groups without changing them. Point to `mutants/survivors-initial.md` for the reviewed inventory and `mutants/survivors-final.md` for the post-change inventory.
+Name the leading deferred groups without changing them. Point to `mutants/triage-initial.md` for the reviewed all-group inventory and the `survivors-*.md` files for complete before-and-after details.

@@ -41,9 +41,13 @@ class ReportNamingTests(unittest.TestCase):
                 controller.write_reports("mutmut", mutants_dir, "final")
 
             for name in ("initial", "final"):
-                payload = json.loads((mutants_dir / f"survivors-{name}.json").read_text())
+                payload = json.loads(
+                    (mutants_dir / f"survivors-{name}.json").read_text()
+                )
                 self.assertEqual(payload["status_counts"], {"killed": 1, "survived": 1})
                 self.assertTrue((mutants_dir / f"survivors-{name}.md").is_file())
+                triage = (mutants_dir / f"triage-{name}.md").read_text()
+                self.assertIn("package.x_target (1)", triage)
 
     def test_report_name_rejects_path_traversal(self) -> None:
         with self.assertRaisesRegex(SystemExit, "report name"):
@@ -77,18 +81,32 @@ class ScopedRerunOutputTests(unittest.TestCase):
                 verbose=False,
             )
             current = [
-                {"name": "package.x_target__mutmut_1", "status": "killed"},
-                {"name": "package.x_target__mutmut_2", "status": "killed"},
+                {
+                    "name": "package.x_target__mutmut_1",
+                    "status": "killed",
+                    "symbol": "package.x_target",
+                },
+                {
+                    "name": "package.x_target__mutmut_2",
+                    "status": "killed",
+                    "symbol": "package.x_target",
+                },
             ]
             output = io.StringIO()
             with (
-                patch.object(controller, "run_captured", return_value=0),
+                patch.object(
+                    controller, "run_captured", return_value=0
+                ) as run_captured,
                 patch.object(controller, "parse_results", return_value=current),
                 contextlib.redirect_stdout(output),
             ):
                 result = controller.command_rerun(args)
 
             self.assertEqual(result, 0)
+            run_captured.assert_called_once_with(
+                [str(executable), "run", "package.x_target__mutmut_*"],
+                mutants_dir / "scoped.log",
+            )
             self.assertIn("Mutation status: killed=2", output.getvalue())
             self.assertNotIn("__mutmut_1", output.getvalue())
             self.assertNotIn("Unresolved selected mutants", output.getvalue())
@@ -115,7 +133,13 @@ class ScopedRerunOutputTests(unittest.TestCase):
                 log=str(mutants_dir / "scoped.log"),
                 verbose=False,
             )
-            current = [{"name": "package.x_target__mutmut_1", "status": "survived"}]
+            current = [
+                {
+                    "name": "package.x_target__mutmut_1",
+                    "status": "survived",
+                    "symbol": "package.x_target",
+                }
+            ]
             output = io.StringIO()
             with (
                 patch.object(controller, "run_captured", return_value=0),
@@ -124,8 +148,102 @@ class ScopedRerunOutputTests(unittest.TestCase):
             ):
                 controller.command_rerun(args)
 
-            self.assertIn("Unresolved selected mutants", output.getvalue())
+            self.assertIn("Unresolved current mutants", output.getvalue())
             self.assertIn("package.x_target__mutmut_1", output.getvalue())
+
+
+class CompactTriageTests(unittest.TestCase):
+    def test_triage_samples_large_groups_but_retains_every_group(self) -> None:
+        groups = [
+            {
+                "symbol": "package.x_large",
+                "count": 5,
+                "mutants": [
+                    {
+                        "name": f"package.x_large__mutmut_{index}",
+                        "changes": [f"- old {index}", f"+ new {index}"],
+                    }
+                    for index in range(5)
+                ],
+            },
+            {
+                "symbol": "package.x_small",
+                "count": 1,
+                "mutants": [
+                    {"name": "package.x_small__mutmut_1", "changes": ["- a", "+ b"]}
+                ],
+            },
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "triage.md"
+            controller.write_triage({"survivor_groups": groups}, path)
+            text = path.read_text()
+
+        self.assertIn("package.x_large (5)", text)
+        self.assertIn("package.x_small (1)", text)
+        self.assertIn("2 additional distinct mutation(s)", text)
+        self.assertNotIn("old 1", text)
+
+
+class CompareReportsTests(unittest.TestCase):
+    def test_compare_uses_diffs_instead_of_unstable_mutant_ids(self) -> None:
+        before = {
+            "total": 2,
+            "status_counts": {"survived": 2},
+            "survivor_groups": [
+                {
+                    "symbol": "package.x_target",
+                    "count": 2,
+                    "mutants": [
+                        {
+                            "name": "package.x_target__mutmut_1",
+                            "changes": ["- a", "+ b"],
+                        },
+                        {
+                            "name": "package.x_target__mutmut_2",
+                            "changes": ["- c", "+ d"],
+                        },
+                    ],
+                }
+            ],
+        }
+        after = {
+            "total": 3,
+            "status_counts": {"killed": 1, "survived": 2},
+            "survivor_groups": [
+                {
+                    "symbol": "package.x_target",
+                    "count": 2,
+                    "mutants": [
+                        {
+                            "name": "package.x_target__mutmut_9",
+                            "changes": ["- a", "+ b"],
+                        },
+                        {
+                            "name": "package.x_target__mutmut_10",
+                            "changes": ["- e", "+ f"],
+                        },
+                    ],
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            mutants_dir = Path(directory)
+            (mutants_dir / "survivors-initial.json").write_text(json.dumps(before))
+            (mutants_dir / "survivors-final.json").write_text(json.dumps(after))
+            args = Namespace(
+                mutants_dir=str(mutants_dir),
+                before="initial",
+                after="final",
+                symbol=["package.x_target"],
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                controller.command_compare(args)
+
+        self.assertIn("same-diff persisted=1", output.getvalue())
+        self.assertIn("no-longer-surviving=1", output.getvalue())
+        self.assertIn("new-diff=1", output.getvalue())
 
 
 if __name__ == "__main__":
