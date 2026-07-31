@@ -28,6 +28,7 @@ allowed-confusables = ["×"]
 [tool.pyright]
 include = [
     "skills/agents-md-comparator/scripts",
+    "skills/beads-handoff/scripts",
     "skills/handoff/scripts",
     "skills/mutation-testing-loop/scripts",
     "skills/mutation-testing-loop/tests",

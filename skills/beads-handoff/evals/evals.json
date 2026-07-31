@@ -1,0 +1,48 @@
+{
+  "skill_name": "beads-handoff",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Work in the supplied Beads-enabled repository. Convert `.agent-artifacts/rate-limit/design.md` into one implementation-ready Beads task. Do not implement production code or create handoff markdown.",
+      "expected_output": "One validated open task is created with the design as spec_id, complete AC coverage, and no repository execution artifacts.",
+      "expectations": [
+        "Exactly one matching open task is created and no epic is created.",
+        "The task description contains every required heading once and in order.",
+        "The task acceptance criteria map every design AC ID and the bundled validator infers and validates the one-task DAG.",
+        "No handoff.md, README.md, progress.md, loop.sh, or task prompt files are created."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Work in the supplied Beads-enabled repository. Convert `.agent-artifacts/audit-events/design.md` into a decomposed implementation handoff in Beads. Do not implement production code.",
+      "expected_output": "One open epic and a context-bounded DAG of self-contained open child tasks are created with correct parentage, dependencies, and complete design coverage.",
+      "expectations": [
+        "One matching epic and at least two child tasks are created without markdown execution artifacts.",
+        "Each task has one outcome, complete required headings, focused validation, a completion check, and a valid done boundary.",
+        "Every direct hard prerequisite is created as a Beads blocking edge; parallel tasks have no accidental edge; parent-child links are not treated as execution blockers.",
+        "Each task's declared `Blocked by:` IDs exactly match its live blocking dependencies, edge directions are correct, and the graph has no cycle.",
+        "All design AC IDs occur in executable child tasks and the bundled validator infers and validates the multi-task DAG."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Work in the supplied Beads-enabled repository. Package `.agent-artifacts/search-redesign/design.md`, which is marked not ready, into Beads issues.",
+      "expected_output": "No issues are created; the response identifies readiness blockers and directs design revision through grill-me.",
+      "expectations": [
+        "The Beads database is unchanged.",
+        "No handoff artifacts are created.",
+        "The exact design blockers are reported without inventing decisions."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Convert the ready design into two dependent Beads tasks. The work needs no initiative-level aggregate tracking, so do not create an epic.",
+      "expected_output": "A validated two-task dependency DAG is created without a coordination epic.",
+      "expectations": [
+        "Exactly two matching tasks and no new epic are created.",
+        "The dependent task has a live blocking edge to its prerequisite and both task bodies declare the same relationship.",
+        "The bundled validator infers and validates the two-task DAG."
+      ]
+    }
+  ]
+}

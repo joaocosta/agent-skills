@@ -13,6 +13,7 @@ fi
 printf '%s\n' 'Running Ruff lint...'
 .venv/bin/python -m ruff check --quiet \
     skills/agents-md-comparator/scripts \
+    skills/beads-handoff/scripts \
     skills/handoff/scripts \
     skills/mutation-testing-loop/scripts \
     skills/mutation-testing-loop/tests
@@ -20,6 +21,7 @@ printf '%s\n' 'Running Ruff lint...'
 printf '%s\n' 'Checking Ruff formatting...'
 .venv/bin/python -m ruff format --check --quiet \
     skills/agents-md-comparator/scripts \
+    skills/beads-handoff/scripts \
     skills/handoff/scripts \
     skills/mutation-testing-loop/scripts \
     skills/mutation-testing-loop/tests
@@ -30,5 +32,6 @@ printf '%s\n' 'Running Pyright...'
 printf '%s\n' 'Running Bandit...'
 .venv/bin/python -m bandit -q -c pyproject.toml -r \
     skills/agents-md-comparator/scripts \
+    skills/beads-handoff/scripts \
     skills/handoff/scripts \
     skills/mutation-testing-loop/scripts
