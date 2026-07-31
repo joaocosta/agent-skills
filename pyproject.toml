@@ -14,9 +14,14 @@ validation = [
 
 [tool.ruff]
 target-version = "py311"
+line-length = 119
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "UP", "B", "SIM", "C4", "PIE", "RUF"]
+select = [
+    "E", "W", "F", "I", "UP", "B", "SIM", "C4", "PIE", "RUF",
+    "A", "ARG", "ASYNC", "DTZ", "ERA", "EXE", "G", "LOG", "PERF",
+    "PGH", "PTH", "RET", "RSE", "SLF", "T10",
+]
 ignore = ["E501"]
 allowed-confusables = ["×"]
 

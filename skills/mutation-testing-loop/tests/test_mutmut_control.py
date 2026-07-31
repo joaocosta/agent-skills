@@ -42,9 +42,7 @@ class ReportNamingTests(unittest.TestCase):
                 controller.write_reports("mutmut", mutants_dir, "final")
 
             for name in ("initial", "final"):
-                payload = json.loads(
-                    (mutants_dir / f"survivors-{name}.json").read_text()
-                )
+                payload = json.loads((mutants_dir / f"survivors-{name}.json").read_text())
                 self.assertEqual(payload["status_counts"], {"killed": 1, "survived": 1})
                 self.assertEqual(
                     payload["symbol_status_counts"],
@@ -86,9 +84,7 @@ class MutantsDirectorySafetyTests(unittest.TestCase):
 
             with (
                 patch.object(controller, "git_root", return_value=root),
-                self.assertRaisesRegex(
-                    SystemExit, "no recognized mutmut-generated marker"
-                ),
+                self.assertRaisesRegex(SystemExit, "no recognized mutmut-generated marker"),
             ):
                 controller.require_safe_mutants_dir(mutants_dir, fresh=True)
 
@@ -133,10 +129,7 @@ class GeneratedDiffTests(unittest.TestCase):
             generated_path.parent.mkdir(parents=True)
             original_path.write_text("\ndef target():\n    return 1\n")
             generated_path.write_text(
-                "def x_target__mutmut_orig():\n"
-                "    return 1\n\n"
-                "def x_target__mutmut_1():\n"
-                "    return 2\n"
+                "def x_target__mutmut_orig():\n    return 1\n\ndef x_target__mutmut_1():\n    return 2\n"
             )
             generated_path.with_suffix(".py.meta").write_text(
                 json.dumps(
@@ -238,9 +231,7 @@ class ScopedRerunOutputTests(unittest.TestCase):
             ]
             output = io.StringIO()
             with (
-                patch.object(
-                    controller, "run_captured", return_value=0
-                ) as run_captured,
+                patch.object(controller, "run_captured", return_value=0) as run_captured,
                 patch.object(controller, "parse_results", return_value=current),
                 contextlib.redirect_stdout(output),
             ):
@@ -291,9 +282,7 @@ class ScopedRerunOutputTests(unittest.TestCase):
                 patch.object(
                     controller,
                     "generated_diffs",
-                    return_value={
-                        "package.x_target__mutmut_1": {"changes": ["- old", "+ new"]}
-                    },
+                    return_value={"package.x_target__mutmut_1": {"changes": ["- old", "+ new"]}},
                 ),
                 contextlib.redirect_stdout(output),
             ):
@@ -323,9 +312,7 @@ class CompactTriageTests(unittest.TestCase):
             {
                 "symbol": "package.x_small",
                 "count": 1,
-                "mutants": [
-                    {"name": "package.x_small__mutmut_1", "changes": ["- a", "+ b"]}
-                ],
+                "mutants": [{"name": "package.x_small__mutmut_1", "changes": ["- a", "+ b"]}],
             },
         ]
         with tempfile.TemporaryDirectory() as directory:

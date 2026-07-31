@@ -10,8 +10,15 @@ if [ ! -x .venv/bin/python ]; then
     exit 1
 fi
 
-printf '%s\n' 'Running Ruff...'
+printf '%s\n' 'Running Ruff lint...'
 .venv/bin/python -m ruff check --quiet \
+    skills/agents-md-comparator/scripts \
+    skills/handoff/scripts \
+    skills/mutation-testing-loop/scripts \
+    skills/mutation-testing-loop/tests
+
+printf '%s\n' 'Checking Ruff formatting...'
+.venv/bin/python -m ruff format --check --quiet \
     skills/agents-md-comparator/scripts \
     skills/handoff/scripts \
     skills/mutation-testing-loop/scripts \

@@ -213,9 +213,13 @@ def validate_ralph(root: Path, result: Validation) -> None:
         readme_acs = set(AC_PATTERN.findall(readme))
         missing_acs = sorted(design_acs - readme_acs, key=int)
         if missing_acs:
-            result.error(f"{readme_path}: coverage map omits design AC IDs: {', '.join('AC' + n for n in missing_acs)}")
+            result.error(
+                f"{readme_path}: coverage map omits design AC IDs: {', '.join('AC' + n for n in missing_acs)}"
+            )
         if not design_acs:
-            result.warn(f"{design_path}: no explicit AC identifiers found; AC coverage could not be checked mechanically")
+            result.warn(
+                f"{design_path}: no explicit AC identifiers found; AC coverage could not be checked mechanically"
+            )
     else:
         result.error(f"missing {design_path}")
 
@@ -235,7 +239,7 @@ def validate_ralph(root: Path, result: Validation) -> None:
             result.error(f"{loop_path}: missing required token {token!r}")
     if not re.search(r'^RALPH_CMD=.* -ne(?: |")', loop, re.MULTILINE):
         result.error(f"{loop_path}: default RALPH_CMD must disable Pi extension discovery with -ne")
-    if not re.search(r'session_name=.*\$\{task_name\}', loop):
+    if not re.search(r"session_name=.*\$\{task_name\}", loop):
         result.error(f"{loop_path}: session name must include the next task file stem")
     if not re.search(r'"\$\{ralph_command\[@\]\}"\s+-n\s+', loop):
         result.error(f"{loop_path}: Pi invocation must set a task-based session name with -n")

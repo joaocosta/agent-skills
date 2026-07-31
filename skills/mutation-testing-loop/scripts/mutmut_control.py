@@ -64,9 +64,7 @@ def mutmut_command(value: str) -> str:
 def run_captured(command: list[str], log_path: Path) -> int:
     with tempfile.NamedTemporaryFile(prefix="mutmut-", delete=False) as stream:
         temporary_path = Path(stream.name)
-        result = subprocess.run(
-            command, stdout=stream, stderr=subprocess.STDOUT, check=False
-        )
+        result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT, check=False)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(temporary_path, log_path)
     return result.returncode
@@ -89,9 +87,7 @@ def require_safe_mutants_dir(mutants_dir: Path, fresh: bool) -> None:
     expected = (root or Path.cwd().resolve()) / "mutants"
     resolved = mutants_dir.resolve()
     if resolved != expected:
-        raise SystemExit(
-            f"mutants directory must be the repository-root generated directory: {expected}"
-        )
+        raise SystemExit(f"mutants directory must be the repository-root generated directory: {expected}")
 
     if root is not None:
         relative = resolved.relative_to(root)
@@ -110,9 +106,7 @@ def require_safe_mutants_dir(mutants_dir: Path, fresh: bool) -> None:
             check=False,
         )
         if ignored.returncode != 0:
-            raise SystemExit(
-                f"mutation state must be ignored by Git before running: {relative}/"
-            )
+            raise SystemExit(f"mutation state must be ignored by Git before running: {relative}/")
 
     if fresh and resolved.exists() and any(resolved.iterdir()):
         generated_markers = (
@@ -121,9 +115,7 @@ def require_safe_mutants_dir(mutants_dir: Path, fresh: bool) -> None:
             resolved / "pyproject.toml",
         )
         if not any(marker.is_file() for marker in generated_markers):
-            raise SystemExit(
-                f"refusing to remove {resolved}: no recognized mutmut-generated marker"
-            )
+            raise SystemExit(f"refusing to remove {resolved}: no recognized mutmut-generated marker")
 
 
 def parse_results(mutmut: str) -> list[dict[str, str]]:
@@ -141,9 +133,7 @@ def parse_results(mutmut: str) -> list[dict[str, str]]:
         if ": " not in stripped:
             continue
         name, status = stripped.rsplit(": ", 1)
-        records.append(
-            {"name": name, "status": status, "symbol": MUTANT_SUFFIX.sub("", name)}
-        )
+        records.append({"name": name, "status": status, "symbol": MUTANT_SUFFIX.sub("", name)})
     return records
 
 
@@ -212,9 +202,7 @@ def generated_diffs(mutants_dir: Path) -> dict[str, MutationDetails]:
         except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
             locations = {}
         functions = {
-            node.name: node
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            node.name: node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         }
         metadata = json.loads(metadata_path.read_text())
         for full_name in metadata.get("exit_code_by_key", {}):
@@ -236,9 +224,7 @@ def report_stem(name: str | None) -> str:
     if name is None:
         return "survivors"
     if not REPORT_NAME.fullmatch(name):
-        raise SystemExit(
-            "report name must contain only letters, numbers, '.', '_', or '-'"
-        )
+        raise SystemExit("report name must contain only letters, numbers, '.', '_', or '-'")
     return f"survivors-{name}"
 
 
@@ -317,9 +303,7 @@ def write_triage(payload: SurvivorReport, path: Path) -> None:
     path.write_text("\n".join(markdown))
 
 
-def write_reports(
-    mutmut: str, mutants_dir: Path, report_name: str | None = None
-) -> tuple[list[Mutant], Counter[str]]:
+def write_reports(mutmut: str, mutants_dir: Path, report_name: str | None = None) -> tuple[list[Mutant], Counter[str]]:
     records = parse_results(mutmut)
     statuses = Counter(record["status"] for record in records)
     diffs = generated_diffs(mutants_dir)
@@ -332,9 +316,7 @@ def write_reports(
                 Mutant,
                 {
                     **record,
-                    **diffs.get(
-                        record["name"], cast(MutationDetails, {"changes": []})
-                    ),
+                    **diffs.get(record["name"], cast(MutationDetails, {"changes": []})),
                 },
             )
         )
@@ -349,8 +331,7 @@ def write_reports(
     payload: SurvivorReport = {
         "status_counts": dict(sorted(statuses.items())),
         "symbol_status_counts": {
-            symbol: dict(sorted(counts.items()))
-            for symbol, counts in sorted(symbol_statuses.items())
+            symbol: dict(sorted(counts.items())) for symbol, counts in sorted(symbol_statuses.items())
         },
         "total": len(records),
         "survivor_groups": [
@@ -359,18 +340,14 @@ def write_reports(
                 "count": len(items),
                 "mutants": items,
             }
-            for symbol, items in sorted(
-                grouped.items(), key=lambda pair: (-len(pair[1]), pair[0])
-            )
+            for symbol, items in sorted(grouped.items(), key=lambda pair: (-len(pair[1]), pair[0]))
         ],
     }
     json_path = report_path(mutants_dir, report_name, "json")
     json_path.write_text(json.dumps(payload, indent=2) + "\n")
 
     markdown = ["# Surviving mutants", "", "## Status summary", ""]
-    markdown.extend(
-        f"- {status}: {count}" for status, count in sorted(statuses.items())
-    )
+    markdown.extend(f"- {status}: {count}" for status, count in sorted(statuses.items()))
     markdown.extend(["", "## Groups", ""])
     for group in payload["survivor_groups"]:
         markdown.append(group_heading(group, 3))
@@ -408,9 +385,7 @@ def command_run(args: argparse.Namespace) -> int:
     require_safe_mutants_dir(mutants_dir, args.fresh)
     if args.fresh and mutants_dir.exists():
         shutil.rmtree(mutants_dir)
-    default_log = (
-        f"mutmut-{args.report_name}-run.log" if args.report_name else "mutmut-run.log"
-    )
+    default_log = f"mutmut-{args.report_name}-run.log" if args.report_name else "mutmut-run.log"
     log_path = Path(args.log) if args.log else mutants_dir / default_log
     return_code = run_captured([mutmut, "run"], log_path)
     if not mutants_dir.is_dir():
@@ -426,9 +401,7 @@ def command_run(args: argparse.Namespace) -> int:
 
 def command_report(args: argparse.Namespace) -> int:
     mutmut = mutmut_command(args.mutmut)
-    survivors, statuses = write_reports(
-        mutmut, Path(args.mutants_dir), args.report_name
-    )
+    survivors, statuses = write_reports(mutmut, Path(args.mutants_dir), args.report_name)
     print_summary(survivors, statuses)
     return 0
 
@@ -440,9 +413,7 @@ def load_report(mutants_dir: Path, name: str | None) -> SurvivorReport:
     return cast(SurvivorReport, json.loads(path.read_text()))
 
 
-def selected_groups(
-    payload: SurvivorReport, symbols: list[str]
-) -> list[SurvivorGroup]:
+def selected_groups(payload: SurvivorReport, symbols: list[str]) -> list[SurvivorGroup]:
     groups_by_symbol = {group["symbol"]: group for group in payload["survivor_groups"]}
     missing = sorted(set(symbols) - set(groups_by_symbol))
     if missing:
@@ -451,9 +422,7 @@ def selected_groups(
 
 
 def command_inspect(args: argparse.Namespace) -> int:
-    groups = selected_groups(
-        load_report(Path(args.mutants_dir), args.report_name), args.symbol
-    )
+    groups = selected_groups(load_report(Path(args.mutants_dir), args.report_name), args.symbol)
     for group in groups:
         mutations = group["mutants"]
         fingerprints = Counter(fingerprint_text(mutant) for mutant in mutations)
@@ -477,24 +446,18 @@ def command_inspect(args: argparse.Namespace) -> int:
 def command_rerun(args: argparse.Namespace) -> int:
     mutmut = mutmut_command(args.mutmut)
     mutants_dir = Path(args.mutants_dir)
-    baseline_groups = selected_groups(
-        load_report(mutants_dir, args.report_name), args.symbol
-    )
+    baseline_groups = selected_groups(load_report(mutants_dir, args.report_name), args.symbol)
     patterns = [f"{symbol}__mutmut_*" for symbol in args.symbol]
     return_code = run_captured([mutmut, "run", *patterns], Path(args.log))
 
-    records = [
-        record for record in parse_results(mutmut) if record["symbol"] in args.symbol
-    ]
+    records = [record for record in parse_results(mutmut) if record["symbol"] in args.symbol]
     diffs = generated_diffs(mutants_dir)
     current: list[Mutant] = [
         cast(
             Mutant,
             {
                 **record,
-                **diffs.get(
-                    record["name"], cast(MutationDetails, {"changes": []})
-                ),
+                **diffs.get(record["name"], cast(MutationDetails, {"changes": []})),
             },
         )
         for record in records
@@ -520,18 +483,12 @@ def command_rerun(args: argparse.Namespace) -> int:
     dispositions: Counter[str] = Counter()
     for mutation_fingerprint, baseline_count in baseline_fingerprints.items():
         remaining = baseline_count
-        for status, count in sorted(
-            current_by_fingerprint[mutation_fingerprint].items()
-        ):
+        for status, count in sorted(current_by_fingerprint[mutation_fingerprint].items()):
             matched = min(remaining, count)
             dispositions[status] += matched
             remaining -= matched
         dispositions["not generated"] += remaining
-    unavailable = sum(
-        fingerprint(mutant) is None
-        for group in baseline_groups
-        for mutant in group["mutants"]
-    )
+    unavailable = sum(fingerprint(mutant) is None for group in baseline_groups for mutant in group["mutants"])
     if unavailable:
         dispositions["diff unavailable"] += unavailable
     print(
@@ -542,9 +499,7 @@ def command_rerun(args: argparse.Namespace) -> int:
     unresolved = [record for record in current if record["status"] != "killed"]
     if unresolved:
         print("Unresolved current mutations:")
-        unresolved_fingerprints = Counter(
-            (str(record["status"]), fingerprint_text(record)) for record in unresolved
-        )
+        unresolved_fingerprints = Counter((str(record["status"]), fingerprint_text(record)) for record in unresolved)
         for (status, text), count in unresolved_fingerprints.items():
             if len(text) > 300:
                 text = text[:297] + "..."
@@ -575,9 +530,7 @@ def command_compare(args: argparse.Namespace) -> int:
     after_groups = {group["symbol"]: group for group in after["survivor_groups"]}
     missing = sorted(set(args.symbol) - set(before_groups))
     if missing:
-        raise SystemExit(
-            "unknown survivor symbol(s) in before report: " + ", ".join(missing)
-        )
+        raise SystemExit("unknown survivor symbol(s) in before report: " + ", ".join(missing))
 
     print(
         f"Before status: total={before['total']}, "
@@ -595,26 +548,14 @@ def command_compare(args: argparse.Namespace) -> int:
         persisted = before_fingerprints & after_fingerprints
         added = after_fingerprints - before_fingerprints
         removed = before_fingerprints - after_fingerprints
-        unavailable_before = sum(
-            fingerprint(mutant) is None for mutant in before_group["mutants"]
-        )
-        unavailable_after = (
-            sum(fingerprint(mutant) is None for mutant in after_group["mutants"])
-            if after_group
-            else 0
-        )
+        unavailable_before = sum(fingerprint(mutant) is None for mutant in before_group["mutants"])
+        unavailable_after = sum(fingerprint(mutant) is None for mutant in after_group["mutants"]) if after_group else 0
         print(f"{symbol}:")
         before_statuses = before.get("symbol_status_counts", {}).get(symbol)
         after_statuses = after.get("symbol_status_counts", {}).get(symbol)
         if before_statuses is not None or after_statuses is not None:
-            before_text = ", ".join(
-                f"{key}={value}"
-                for key, value in sorted((before_statuses or {}).items())
-            )
-            after_text = ", ".join(
-                f"{key}={value}"
-                for key, value in sorted((after_statuses or {}).items())
-            )
+            before_text = ", ".join(f"{key}={value}" for key, value in sorted((before_statuses or {}).items()))
+            after_text = ", ".join(f"{key}={value}" for key, value in sorted((after_statuses or {}).items()))
             print(f"  all statuses before: {before_text or 'none'}")
             print(f"  all statuses after: {after_text or 'none'}")
         print(
@@ -637,27 +578,17 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--mutants-dir", default="mutants")
     commands = result.add_subparsers(dest="command", required=True)
 
-    run = commands.add_parser(
-        "run", help="run all mutants without streaming progress output"
-    )
-    run.add_argument(
-        "--fresh", action="store_true", help="remove generated mutation state first"
-    )
-    run.add_argument(
-        "--report-name", help="retain reports and the default log under this run name"
-    )
-    run.add_argument(
-        "--log", help="full output path (default derives from --report-name)"
-    )
+    run = commands.add_parser("run", help="run all mutants without streaming progress output")
+    run.add_argument("--fresh", action="store_true", help="remove generated mutation state first")
+    run.add_argument("--report-name", help="retain reports and the default log under this run name")
+    run.add_argument("--log", help="full output path (default derives from --report-name)")
     run.set_defaults(handler=command_run)
 
     report = commands.add_parser("report", help="regenerate compact survivor artifacts")
     report.add_argument("--report-name", help="write reports under this run name")
     report.set_defaults(handler=command_report)
 
-    inspect = commands.add_parser(
-        "inspect", help="print full details for exact survivor groups"
-    )
+    inspect = commands.add_parser("inspect", help="print full details for exact survivor groups")
     inspect.add_argument("--symbol", action="append", required=True)
     inspect.add_argument("--report-name", help="read groups from this named report")
     inspect.add_argument(
@@ -667,9 +598,7 @@ def parser() -> argparse.ArgumentParser:
     )
     inspect.set_defaults(handler=command_inspect)
 
-    rerun = commands.add_parser(
-        "rerun", help="rerun all current mutants for one or more exact survivor symbols"
-    )
+    rerun = commands.add_parser("rerun", help="rerun all current mutants for one or more exact survivor symbols")
     rerun.add_argument("--symbol", action="append", required=True)
     rerun.add_argument(
         "--report-name",
@@ -683,9 +612,7 @@ def parser() -> argparse.ArgumentParser:
     )
     rerun.set_defaults(handler=command_rerun)
 
-    compare = commands.add_parser(
-        "compare", help="compare selected survivor groups across named reports by diff"
-    )
+    compare = commands.add_parser("compare", help="compare selected survivor groups across named reports by diff")
     compare.add_argument("--before", required=True, help="before report name")
     compare.add_argument("--after", required=True, help="after report name")
     compare.add_argument("--symbol", action="append", required=True)
