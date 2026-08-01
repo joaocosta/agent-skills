@@ -15,6 +15,8 @@ Operate source-first and assume no design-session conversation remains in contex
 
 Run `bd prime`, then `bd where`. Stop if the target repository has no active Beads workspace; do not initialize one unless the user explicitly asks. Follow the repository's active Beads profile and conventions. Do not commit, push, or sync merely because this skill created issues.
 
+Before mutation, resolve only unknown CLI capabilities needed for creation, dependencies, and inspection. Use targeted help excerpts rather than dumping help for every later validation command, and establish JSON shape from one bounded read-only response. Treat raw objects, lists, and optional `{ "data": ... }` envelopes as supported shapes; parse structurally rather than assuming a top-level `id`. Redirect large JSON responses to temporary files and extract only fields needed for planning or diagnosis so issue bodies do not repeatedly consume the session context.
+
 Require a path to `.agent-artifacts/<initiative-slug>/design.md` or an unambiguous initiative slug. If neither is supplied, inspect `.agent-artifacts/` for one clearly matching candidate; do not guess among multiple designs.
 
 Read the complete design. Check its declared readiness, then inspect current repository state and named anchors only enough to:
@@ -25,7 +27,7 @@ Read the complete design. Check its declared readiness, then inspect current rep
 
 Proceed only when the design is explicitly **ready for handoff** and no open question would force an implementer to choose product behavior, architecture, compatibility, risk posture, or acceptance semantics. Stop without mutating Beads when it is missing, not ready, materially incomplete, or contradicted by current evidence. State the exact gap and direct revision through `grill-me`; do not edit the design or invent a decision.
 
-Before creating anything, search existing open and closed issues by initiative title, slug, source design path, and distinctive outcome. Inspect plausible matches with `bd show --json`. Reuse a complete matching handoff, or update only with explicit user approval. Never create a duplicate handoff merely because IDs were not supplied.
+Before creating anything, search existing open and closed issues by initiative title, slug, source design path, and distinctive outcome. Prefer a native exact `spec_id` filter when available; title search alone cannot establish that no matching handoff exists, and description search may have different CLI syntax. Inspect plausible matches with `bd show --json`. Reuse a complete matching handoff, or update only with explicit user approval. Never create a duplicate handoff merely because IDs were not supplied.
 
 ## Plan a context-bounded executable task DAG
 
@@ -61,7 +63,7 @@ Also populate the Beads `acceptance_criteria` field with concise observable crit
 
 Use temporary body files outside the repository when safer than shell quoting, then remove them. Do not write manifests, task markdown, progress files, or loop controls into the repository.
 
-When using a coordination epic, create or identify it first with a placeholder-free planned breakdown naming each task outcome. Create tasks in topological order so prerequisite IDs exist, adding `--parent <epic-id>` only for hierarchy. In each task, declare `Blocked by: None` or the direct prerequisite IDs and name the output consumed from each.
+When using a coordination epic, create or identify it first with a placeholder-free planned breakdown naming each task outcome. Create tasks in topological order so prerequisite IDs exist, adding `--parent <epic-id>` only for hierarchy. In each task, use the machine-readable line `Blocked by: None` or `Blocked by: <direct prerequisite IDs>` exactly: put no terminal punctuation or commentary on that line, then name the output consumed from each prerequisite below it.
 
 Create blocking edges with `--deps <prerequisite-id>,...` when supported; otherwise immediately run `bd dep add <blocked-task> <prerequisite-task>`. The blocked issue is always first. After capturing live child IDs, update the epic with its final breakdown, topological layers, coverage map, and direct edge list.
 
@@ -69,7 +71,11 @@ Leave generated execution work open and unassigned. Implementation agents claim 
 
 ## Create carefully
 
-Before mutation, finish all issue bodies, acceptance text, titles, parentage, and dependency edges in memory or temporary files. Prefer commands equivalent to:
+Before mutation, finish the complete content plan, acceptance text, titles, parentage, and dependency edges. Bodies that need live IDs may remain safely parameterized until their prerequisites exist; render those IDs into temporary files immediately before creation, then inspect the rendered file for exact headings, unresolved placeholders, the exact `Blocked by:` line, and accidental shell expansion.
+
+Keep Markdown out of shell evaluation: use quoted heredocs for literal bodies or generate files with a language that performs explicit value substitution. Never put Markdown containing backticks into an unquoted heredoc. Use a managed temporary directory, register cleanup when it is created, and verify its removal before reporting completion.
+
+Prefer commands equivalent to:
 
 ```bash
 bd create --title "<outcome>" --type task --priority 2 \
@@ -88,13 +94,13 @@ bd dep add <blocked-child-id> <prerequisite-child-id>
 bd update <epic-id> --body-file <final-temporary-epic-body>
 ```
 
-Capture every returned ID. Stop on the first mutation error. Do not silently delete successfully created issues or retry creation, because either can hide shared concurrent changes. Inspect the partial state, record the exact failure on the epic when one exists, and report the IDs requiring repair.
+Capture and verify every returned ID before the next mutation. Execute creations and updates as discrete checked steps rather than one opaque multi-create shell batch; this makes the stop boundary effective and prevents one malformed body or response from contaminating later issues. Stop on the first mutation or body-generation error. Do not silently delete successfully created issues or retry creation, because either can hide shared concurrent changes. Inspect the partial state, record the exact failure on the epic when one exists, and report the IDs requiring repair. Resume only after the user authorizes repair, re-inspecting live children and matching issues first so resumption cannot duplicate partial work.
 
 ## Validate and review the live handoff
 
 Inspect live Beads state rather than trusting the planned text:
 
-1. Save `bd show <all-created-ids> --json` output to a temporary file outside the repository, then run from this skill directory:
+1. Save `bd show <all-created-ids> --json` output to a temporary file outside the repository, then run from this skill directory. Run the bundled validator without reading its source unless the documented invocation fails or its interface is genuinely unclear:
 
    ```bash
    python3 scripts/validate_beads_handoff.py <show-json> \
@@ -103,10 +109,10 @@ Inspect live Beads state rather than trusting the planned text:
 
 2. For a multi-task DAG, run `bd graph <epic-or-task-id> --compact` and `bd dep cycles` or the installed equivalent; with an epic, also run `bd children <epic-id> --json`. Compare live parentage and edges with both ledgers and the epic: missing and extra edges are defects.
 3. Run `bd lint <all-created-ids>` and inspect `bd ready`. Confirm dependency-free tasks are runnable, blocked tasks are not, and parallel tasks remain independent.
-4. Rerun the duplicate search and confirm the handoff is the sole match.
+4. Rerun the exact-spec and outcome duplicate checks and confirm the handoff is the sole match.
+5. Perform a semantic pass against the design and both ledgers without printing full bodies again. Confirm each task has one context-bounded outcome, explicit execution and validation evidence, valid boundaries and intermediate states, and no need to rediscover work or reopen settled decisions; confirm complete outline, constraint, and AC coverage.
+6. Remove temporary bodies and captured JSON, then verify repository status contains no execution artifacts or unintended changes.
 
 Treat failures as issue defects. Update only newly created issues with non-interactive `bd update` flags, repair edges explicitly, and rerun every check. Never use `bd edit`, weaken content, or skip validation to report success.
-
-A mechanical pass is not enough. Reread the design and live issues as a fresh implementation agent and confirm that each task has one context-bounded outcome, explicit execution and validation evidence, valid boundaries and intermediate states, and no need to rediscover work or reopen settled decisions. Verify semantic coverage of the outline, constraints, and ACs, and confirm Beads alone exposes ready work and durable status without repository control files.
 
 Report the task count, coordination epic ID if any, ordered task IDs and titles, dependency edges, and exact mechanical and semantic validation results. Mention that no commit, push, or Beads sync was performed unless separately authorized.
